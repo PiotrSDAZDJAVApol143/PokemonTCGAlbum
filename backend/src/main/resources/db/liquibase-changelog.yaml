@@ -1,0 +1,100 @@
+databaseChangeLog:
+  - changeSet:
+      id: 01_create_table_user
+      author: piotr
+      changes:
+        - sqlFile:
+            path: scripts/01_create_table_user.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+            stripComments: true
+
+  - changeSet:
+      id: 02_create_table_card_set
+      author: piotr
+      changes:
+        - sqlFile:
+            path: scripts/02_create_table_card_set.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+            stripComments: true
+
+  - changeSet:
+      id: 03_create_table_tcg_card
+      author: piotr
+      changes:
+        - sqlFile:
+            path: scripts/03_create_table_tcg_card.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+            stripComments: true
+
+  - changeSet:
+      id: 04_create_table_attack
+      author: piotr
+      changes:
+        - sqlFile:
+            path: scripts/04_create_table_attack.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+            stripComments: true
+
+  - changeSet:
+      id: 05_create_table_ability
+      author: piotr
+      changes:
+        - sqlFile:
+            path: scripts/05_create_table_ability.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+            stripComments: true
+
+  - changeSet:
+      id: 06_create_table_user_card
+      author: piotr
+      changes:
+        - sqlFile:
+            path: scripts/06_create_table_user_card.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+            stripComments: true
+
+  - changeSet:
+      id: 07_create_table_deck
+      author: piotr
+      changes:
+        - sqlFile:
+            path: scripts/07_create_table_deck.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+            stripComments: true
+
+  - changeSet:
+      id: 08_create_table_user_card_in_deck
+      author: piotr
+      changes:
+        - sqlFile:
+            path: scripts/08_create_table_user_card_in_deck.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+            stripComments: true
+
+  - changeSet:
+      id: 09_create_table_refresh_token
+      author: piotr
+      changes:
+        - sqlFile:
+            path: scripts/09_create_table_refresh_token.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+            stripComments: true
+
+  - changeSet:
+      id: 11_create_table_deck_cards
+      author: piotr
+      changes:
+        - sqlFile:
+            path: scripts/11_create_table_deck_cards.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+            stripComments: true
