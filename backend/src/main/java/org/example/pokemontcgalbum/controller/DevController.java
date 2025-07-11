@@ -1,11 +1,17 @@
 package org.example.pokemontcgalbum.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.RequiredArgsConstructor;
+import org.example.pokemontcgalbum.dto.CardTranslationImport;
 import org.example.pokemontcgalbum.service.PokemonExportService;
 import org.example.pokemontcgalbum.service.TcgCardService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+
+import java.io.InputStream;
+import java.util.List;
 
 @RestController
 @PreAuthorize("hasRole('DEV')")
@@ -14,6 +20,7 @@ import org.springframework.web.bind.annotation.*;
 public class DevController {
     private final PokemonExportService exportService;
     private final TcgCardService cardService;
+    private final ObjectMapper objectMapper;
     @GetMapping("/export-translations")
     public ResponseEntity<String> exportTranslations(
             @RequestParam(required = false, defaultValue = "C:\\Users\\Piotrek\\Desktop\\tcg_export.json") String path) {
@@ -22,6 +29,21 @@ public class DevController {
             return ResponseEntity.ok("Eksport zakończony! Plik: " + path);
         } catch (Exception e) {
             return ResponseEntity.status(500).body("Błąd: " + e.getMessage());
+        }
+    }
+    @PostMapping("/import-pl-translations")
+    public ResponseEntity<?> importTranslations() {
+        try {
+            // Wczytaj plik z resources
+            InputStream is = getClass().getResourceAsStream("/translations-pl.json");
+            if (is == null) {
+                return ResponseEntity.badRequest().body("Nie znaleziono pliku tłumaczeń!");
+            }
+            List<CardTranslationImport> cards = objectMapper.readValue(is, new TypeReference<>() {});
+            int updates = cardService.updateTranslationsFromImport(cards);
+            return ResponseEntity.ok("Zaimportowano/zmodyfikowano: " + updates + " kart.");
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Błąd importu: " + e.getMessage());
         }
     }
     // Update rating for card (overall)

@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.example.pokemontcgalbum.model.User;
 import org.example.pokemontcgalbum.repository.RefreshTokenRepository;
 import org.example.pokemontcgalbum.security.RefreshToken;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -12,6 +13,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Transactional
 public class RefreshTokenService {
     private final RefreshTokenRepository refreshTokenRepository;
     private static final long REFRESH_TOKEN_DURATION_DAYS = 7;

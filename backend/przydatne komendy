@@ -1,0 +1,11 @@
+C:\Users\Piotrek\IdeaProjects\projekty własne\Pokemon-TCG-Album\frontend
+cd "/c/Users/Piotrek/IdeaProjects/projekty własne/Pokemon-TCG-Album/frontend"
+cd frontend
+cd ..   - katalog wyzej
+pwd - gdzie aktualnie jestes
+
+npm create vite@latest . -- --template react
+npm install
+
+
+npm run dev
