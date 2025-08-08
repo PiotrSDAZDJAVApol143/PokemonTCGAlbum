@@ -37,6 +37,10 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/pokedex/**").permitAll()
                         .requestMatchers("/api/cards/**").permitAll()
+                        .requestMatchers("/api/user-cards/**").authenticated()
+                        .requestMatchers("/api/user-decks/**").authenticated()
+                        .requestMatchers("/api/user/**").hasAnyRole("USER", "DEV")
+                        .requestMatchers("/api/dev/**").authenticated()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
@@ -47,8 +51,8 @@ public class SecurityConfig {
     @Bean
     public CorsFilter corsFilter() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of("http://localhost:5173")); // lub "*", ale lepiej wskazać domenę frontu
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        config.setAllowedOrigins(List.of("http://localhost:5173"));
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
 

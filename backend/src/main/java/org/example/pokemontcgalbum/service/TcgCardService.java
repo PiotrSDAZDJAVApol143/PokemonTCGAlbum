@@ -155,4 +155,28 @@ public class TcgCardService {
     public void deleteById(String id) {
         cardRepository.deleteById(id);
     }
+
+    public Page<TcgCard> findByNumberInSetAndPrintedTotal(String numberInSet, String printedTotal, Pageable pageable) {
+        // Zamień printedTotal na Integer!
+        String normalizedNumberInSet = normalizeNumber(numberInSet);
+        int printedTotalInt;
+        try {
+            printedTotalInt = Integer.parseInt(printedTotal.replaceFirst("^0+(?!$)", "")); // usunie zera z przodu
+        } catch (NumberFormatException e) {
+            return Page.empty(pageable);
+        }
+        // Szukaj po normalizedNumberInSet i printedTotalInt
+        return cardRepository.findByNumberInSetAndSet_PrintedTotal(normalizedNumberInSet, printedTotalInt, pageable);
+    }
+
+    private String normalizeNumber(String number) {
+        if (number == null) return null;
+        try {
+            // Usuwa zera z przodu: "001" -> "1"
+            return String.valueOf(Integer.parseInt(number));
+        } catch (NumberFormatException e) {
+            // Jeśli nie liczba, zwraca oryginał
+            return number;
+        }
+    }
 }

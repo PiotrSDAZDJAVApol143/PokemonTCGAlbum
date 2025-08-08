@@ -28,6 +28,7 @@ public class TcgCard {
     @ManyToOne
     @JoinColumn(name = "set_id")
     private CardSet set;
+    private String numberInSet;
 
     private String rarity;
     private String imageUrlSmall;

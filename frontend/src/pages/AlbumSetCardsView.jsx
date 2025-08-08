@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import {useState, useEffect} from "react";
 import axios from "axios";
-import { useNavigate } from "react-router-dom";
+import {useNavigate} from "react-router-dom";
 
 export default function AlbumSetCardsView({
                                               setId,
@@ -12,11 +12,12 @@ export default function AlbumSetCardsView({
                                           }) {
     const [cards, setCards] = useState([]);
     const [totalPages, setTotalPages] = useState(1);
+    const [setInfo, setSetInfo] = useState(null);
     const navigate = useNavigate();
 
     useEffect(() => {
         axios.get("/api/cards/search", {
-            params: { setId, page, size: 10, name: search }
+            params: {setId, page, size: 10, name: search}
         }).then(res => {
             setCards(res.data.content);
             setTotalPages(res.data.totalPages);
@@ -31,13 +32,24 @@ export default function AlbumSetCardsView({
     }, [setId]);
 
     return (
-        <div className="px-5 pt-1">
-            <div className="flex items-center justify-between mb-5">
+        <div className="flex flex-col min-h-screen bg-[#f7f8fa] overflow-hidden">
+            <div className=" flex items-center justify-between px-14 py-4">
                 <button
                     className="px-6 py-2 rounded bg-gray-200 font-bold"
                     onClick={goBack}
                 >← Powrót
                 </button>
+                {setInfo &&
+                    <div className="flex items-center gap-6 mx-auto">
+                        {setInfo.logoUrl && (
+                            <img src={setInfo.logoUrl} alt={setInfo.name} className="h-14 drop-shadow"/>
+                        )}
+                        <div className="flex flex-col items-start">
+                            <span className="text-2xl font-bold">{setInfo.name}</span>
+                            <span className="text-base text-gray-500">{setInfo.series}</span>
+                        </div>
+                    </div>
+                }
                 <input
                     className="border px-4 py-2 rounded w-80"
                     placeholder="Szukaj nazwę Pokemona..."
@@ -48,35 +60,36 @@ export default function AlbumSetCardsView({
                     }}
                 />
             </div>
-            <div className="text-2xl font-bold mb-4">Karty w secie</div>
-            <div className="grid grid-cols-5 gap-8 mb-6">
-                {cards.map((card, i) => (
-                    <div
-                        key={card.id}
-                        className="flex flex-col items-center cursor-pointer transition-transform duration-150 hover:scale-105"
-                        onClick={() => navigate(`/card/${card.id}`, {
-                            state: {
-                                page,
-                                size: 10,
-                                setId,
-                                search,
-                                idxOnPage: i,
-                                view: "set"
-                            }
-                        })}
-                        style={{ minHeight: 260 }}
-                    >
-                        <img
-                            src={card.imageUrlSmall || card.officialArtworkUrl}
-                            alt={card.name}
-                            className="w-[184px] h-[260px] object-contain drop-shadow-lg"
-                            style={{ background: "#fff", borderRadius: "12px" }}
-                        />
-                        <div className="font-bold mt-2">{card.name}</div>
-                    </div>
-                ))}
+            <div className="flex-1 flex flex-col items-center justify-center">
+                <div className="grid grid-cols-5 gap-8 w-full max-w-[1280px] mx-auto" style={{minHeight: 580}}>
+                    {cards.map((card, i) => (
+                        <div
+                            key={card.id}
+                            className="flex flex-col items-center cursor-pointer transition-transform duration-150 hover:scale-105"
+                            onClick={() => navigate(`/card/${card.id}`, {
+                                state: {
+                                    page,
+                                    size: 10,
+                                    setId,
+                                    search,
+                                    idxOnPage: i,
+                                    view: "set"
+                                }
+                            })}
+                            style={{minHeight: 260}}
+                        >
+                            <img
+                                src={card.imageUrlSmall || card.officialArtworkUrl}
+                                alt={card.name}
+                                className="w-[184px] h-[260px] object-contain drop-shadow-lg"
+                                style={{background: "#fff", borderRadius: "12px"}}
+                            />
+                            <div className="font-bold mt-2">{card.name}</div>
+                        </div>
+                    ))}
+                </div>
             </div>
-            <div className="mt-8 flex justify-center items-center gap-4">
+            <div className="flex justify-center items-center gap-4 py-2 bg-[transparent] w-full">
                 <button
                     className="px-4 py-2 rounded border"
                     onClick={() => setPage(p => Math.max(0, p - 1))}
@@ -91,6 +104,16 @@ export default function AlbumSetCardsView({
                 >Następna
                 </button>
             </div>
+
+            <Footer />
         </div>
+    );
+}
+
+function Footer() {
+    return (
+        <footer className="w-full text-center py-3 text-xs text-gray-400 border-t bg-white">
+            © {new Date().getFullYear()} Pokemon TCG Album API. Wszelkie prawa zastrzeżone.
+        </footer>
     );
 }

@@ -3,8 +3,11 @@ import { useAuth } from "../context/AuthContext";
 import AlbumAllView from "./AlbumAllView";
 import AlbumSetListView from "./AlbumSetListView";
 import AlbumSetCardsView from "./AlbumSetCardsView";
-import AlbumUserView from "./AlbumUserView";
+import AlbumUserView from "./AlbumUserAllView.jsx";
 import { useLocation } from "react-router-dom";
+import AlbumUserAllView from "./AlbumUserAllView";
+import AlbumUserSetListView from "./AlbumUserSetListView";
+import AlbumUserSetCardsView from "./AlbumUserSetCardsView";
 
 export default function Album() {
     const { user } = useAuth();
@@ -16,6 +19,9 @@ export default function Album() {
 
     const [setPageIdx, setSetPageIdx] = useState(0);
     const [setSearch, setSetSearch] = useState("");
+
+    const [userAlbumPage, setUserAlbumPage] = useState(0);
+    const [userAlbumSearch, setUserAlbumSearch] = useState("");
 
     // Do paginacji w AlbumAllView
     const [albumPage, setAlbumPage] = useState(0);
@@ -131,9 +137,58 @@ export default function Album() {
 
     // Widok albumu użytkownika
     if (step === "user") {
+        // Panel wyboru dla Twojego Albumu
         return (
-            <AlbumUserView
-                goBack={() => setStep(null)}
+            <div className="flex flex-col items-center mt-10">
+                <button className="mb-4 px-6 py-2 rounded bg-gray-200" onClick={() => setStep(null)}>← Powrót</button>
+                <div className="flex gap-16">
+                    <div className="flex flex-col items-center">
+                        <button className="border-2 rounded-lg px-10 py-6 font-bold text-xl hover:bg-gray-100 mb-2"
+                                onClick={() => setStep("user-all")}>
+                            Wyświetl wszystkie Twoje karty
+                        </button>
+                        <span>Podgląd całej Twojej kolekcji</span>
+                    </div>
+                    <div className="flex flex-col items-center">
+                        <button className="border-2 rounded-lg px-10 py-6 font-bold text-xl hover:bg-gray-100 mb-2"
+                                onClick={() => setStep("user-sets")}>
+                            Wyświetl wg serii/setu
+                        </button>
+                        <span>Twoje karty wg serii/setu</span>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+    if (step === "user-all") {
+        return (
+            <AlbumUserAllView
+                goBack={() => setStep("user")}
+                page={userAlbumPage}
+                setPage={setUserAlbumPage}
+                search={userAlbumSearch}
+                setSearch={setUserAlbumSearch}
+            />
+        );
+    }
+    if (step === "user-sets") {
+        return (
+            <AlbumUserSetListView
+                goBack={() => setStep("user")}
+                onSelectSet={(setId) => {
+                    setSelectedSet(setId);
+                    setStep("user-set-cards");
+                }}
+            />
+        );
+    }
+    // Karty z danego setu
+    if (step === "user-set-cards") {
+        return (
+            <AlbumUserSetCardsView
+                setId={selectedSet}
+                goBack={() => setStep("user-sets")}
+                // paginacja/search jeśli chcesz
             />
         );
     }

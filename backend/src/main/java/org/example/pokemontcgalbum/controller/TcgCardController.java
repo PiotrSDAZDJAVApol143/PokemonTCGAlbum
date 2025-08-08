@@ -67,7 +67,12 @@ public class TcgCardController {
     ) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("name"));
         Page<TcgCard> result;
-        if (!setId.isEmpty() && !name.isEmpty()) {
+        if (name.matches("\\d{1,3}/\\d{1,3}")) {
+            String[] parts = name.split("/");
+            String numberInSet = parts[0];
+            String printedTotal = parts[1];
+            result = service.findByNumberInSetAndPrintedTotal(numberInSet, printedTotal, pageable);
+        } else if (!setId.isEmpty() && !name.isEmpty()) {
             result = service.findByNameAndSet(name, setId, pageable);
         } else if (!setId.isEmpty()) {
             result = service.findBySet(setId, pageable);

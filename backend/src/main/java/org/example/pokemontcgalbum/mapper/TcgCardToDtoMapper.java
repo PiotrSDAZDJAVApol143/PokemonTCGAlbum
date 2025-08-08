@@ -23,6 +23,7 @@ public class TcgCardToDtoMapper {
         dto.setRarity(card.getRarity());
         dto.setImageUrlSmall(card.getImageUrlSmall());
         dto.setImageUrlLarge(card.getImageUrlLarge());
+        dto.setNumberInSet(card.getNumberInSet());
 
         // Official artwork URL na podstawie pokedexNumber
         if (card.getPokedexNumber() != null && card.getPokedexNumber() > 0) {
@@ -51,6 +52,7 @@ public class TcgCardToDtoMapper {
             setDto.setReleaseDate(card.getSet().getReleaseDate() != null
                     ? card.getSet().getReleaseDate().toString()
                     : null);
+            setDto.setPrintedTotal(card.getSet().getPrintedTotal());
             dto.setSet(setDto);
         }
 
@@ -71,6 +73,7 @@ public class TcgCardToDtoMapper {
         if (card.getAttacks() != null && !card.getAttacks().isEmpty()) {
             List<AttackDto> attackDtos = card.getAttacks().stream().map(attack -> {
                 AttackDto a = new AttackDto();
+                a.setId(attack.getId());
                 a.setName(attack.getName());
                 a.setNamePl(attack.getNamePl());
                 a.setCost(attack.getCost());

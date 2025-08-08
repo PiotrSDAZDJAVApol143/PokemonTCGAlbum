@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
+import api from "../api";
 import { useAuth } from "../context/AuthContext";
 
 export default function PokedexUserView({ goBack }) {
@@ -9,9 +9,9 @@ export default function PokedexUserView({ goBack }) {
     const [selected, setSelected] = useState(null);
 
     useEffect(() => {
-        axios.get("/api/pokedex").then(res => setPokemonList(res.data));
+        api.get("/pokedex").then(res => setPokemonList(res.data));
         if (user) {
-            axios.get("/api/user/pokedex").then(res => setUserNumbers(res.data.map(e => e.pokedexNumber)));
+            api.get("/user/pokedex").then(res => setUserNumbers(res.data.map(e => e.pokedexNumber)));
         }
     }, [user]);
 

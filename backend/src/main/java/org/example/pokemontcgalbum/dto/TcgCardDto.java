@@ -16,6 +16,7 @@ public class TcgCardDto {
     private String type;
     private Integer pokedexNumber;
     private CardSetDto set;
+    private String numberInSet;
     private String rarity;
     private String imageUrlSmall;
     private String imageUrlLarge;

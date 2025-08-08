@@ -1,7 +1,9 @@
 package org.example.pokemontcgalbum.service;
 
 import lombok.RequiredArgsConstructor;
+import org.example.pokemontcgalbum.model.TcgCard;
 import org.example.pokemontcgalbum.model.User;
+import org.example.pokemontcgalbum.model.UserCard;
 import org.example.pokemontcgalbum.model.UserRole;
 import org.example.pokemontcgalbum.repository.UserRepository;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -37,11 +39,16 @@ public class UserService implements UserDetailsService {
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
         var user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
+        System.out.println("Building user details for: " + user.getUsername() + ", role: " + user.getRole().name());
         return org.springframework.security.core.userdetails.User
                 .withUsername(user.getUsername())
                 .password(user.getPassword())
                 .roles(user.getRole() == null ? "USER" : user.getRole().name())
                 .build();
+    }
+
+    public Optional<User> findById(Long id) {
+        return userRepository.findById(id);
     }
 
 }

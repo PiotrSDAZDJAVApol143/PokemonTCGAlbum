@@ -3,6 +3,9 @@ package org.example.pokemontcgalbum.service;
 import lombok.RequiredArgsConstructor;
 import org.example.pokemontcgalbum.dto.TcgApiCardDto;
 import org.example.pokemontcgalbum.dto.TcgApiCardsResponseDto;
+import org.example.pokemontcgalbum.dto.TcgApiSetDto;
+import org.example.pokemontcgalbum.dto.TcgApiSetResponseDto;
+import org.example.pokemontcgalbum.repository.TcgCardRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
@@ -14,6 +17,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class TcgApiService {
     private final WebClient tcgApiWebClient;
+    private final TcgCardRepository cardRepository;
 
     public List<TcgApiCardDto> getCardsByPokemonName(String name) {
         Mono<TcgApiCardsResponseDto> response = tcgApiWebClient.get()
@@ -39,5 +43,14 @@ public class TcgApiService {
             page++;
         }
         return allCards;
+    }
+    public TcgApiSetDto getSetById(String setId) {
+        TcgApiSetResponseDto response = tcgApiWebClient.get()
+                .uri("/sets/" + setId)
+                .retrieve()
+                .bodyToMono(TcgApiSetResponseDto.class)
+                .block();
+
+        return response != null ? response.getData() : null;
     }
 }

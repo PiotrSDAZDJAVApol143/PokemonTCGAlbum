@@ -4,8 +4,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.RequiredArgsConstructor;
 import org.example.pokemontcgalbum.dto.CardTranslationImport;
+import org.example.pokemontcgalbum.dto.RatingDto;
 import org.example.pokemontcgalbum.service.PokemonExportService;
 import org.example.pokemontcgalbum.service.TcgCardService;
+import org.example.pokemontcgalbum.service.UpdateMissingFieldsService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -21,6 +23,7 @@ public class DevController {
     private final PokemonExportService exportService;
     private final TcgCardService cardService;
     private final ObjectMapper objectMapper;
+    private final UpdateMissingFieldsService updateMissingFieldsService;
     @GetMapping("/export-translations")
     public ResponseEntity<String> exportTranslations(
             @RequestParam(required = false, defaultValue = "C:\\Users\\Piotrek\\Desktop\\tcg_export.json") String path) {
@@ -47,23 +50,28 @@ public class DevController {
         }
     }
     // Update rating for card (overall)
-    @PostMapping("/{id}/rating")
-    public ResponseEntity<?> rateCard(@PathVariable String id, @RequestParam int rating) {
-        cardService.setCardRating(id, rating);
+    @PatchMapping("/{id}/rating")
+    public ResponseEntity<?> rateCard(@PathVariable String id, @RequestBody RatingDto dto) {
+        cardService.setCardRating(id, dto.getRating());
         return ResponseEntity.ok().build();
     }
 
     // Update rating for ability
-    @PostMapping("/ability/{id}/rating")
-    public ResponseEntity<?> rateAbility(@PathVariable Long id, @RequestParam int rating) {
-        cardService.setAbilityRating(id, rating);
+    @PatchMapping("/ability/{id}/rating")
+    public ResponseEntity<?> rateAbility(@PathVariable Long id, @RequestBody RatingDto dto) {
+        cardService.setAbilityRating(id, dto.getRating());
         return ResponseEntity.ok().build();
     }
 
     // Update rating for attack
-    @PostMapping("/attack/{id}/rating")
-    public ResponseEntity<?> rateAttack(@PathVariable Long id, @RequestParam int rating) {
-        cardService.setAttackRating(id, rating);
+    @PatchMapping("/attack/{id}/rating")
+    public ResponseEntity<?> patchAttackRating(@PathVariable Long id, @RequestBody RatingDto dto) {
+        cardService.setAttackRating(id, dto.getRating());
+        return ResponseEntity.ok().build();
+    }
+    @PatchMapping("/rule/{id}/rating")
+    public ResponseEntity<?> rateRule(@PathVariable Long id, @RequestBody RatingDto dto) {
+        cardService.setRuleRating(id, dto.getRating());
         return ResponseEntity.ok().build();
     }
 
@@ -74,5 +82,10 @@ public class DevController {
                                              @RequestParam String descriptionPl) {
         cardService.updateAttackTranslation(id, namePl, descriptionPl);
         return ResponseEntity.ok().build();
+    }
+    @PostMapping("/update-missing-fields")
+    public ResponseEntity<?> updateMissingFields() {
+        int updated = updateMissingFieldsService.updateMissingFields();
+        return ResponseEntity.ok("Zaktualizowano dane dla " + updated + " kart.");
     }
 }

@@ -4,10 +4,10 @@ import lombok.Data;
 
 @Data
 public class UserCardDto {
-        private String cardId;             // np. "sv7-45"
-        private String cardName;           // np. "Fuecoco"
-        private String imageUrlSmall;      // miniaturka do listy
-        private Integer quantity;          // ile egzemplarzy user ma
-
-        // Możesz dodać: np. flavorText, tłumaczenia itd.
-    }
+    private String cardId;             // np. "sv7-45"
+    private String cardName;           // np. "Fuecoco"
+    private String imageUrlSmall;      // miniaturka do listy
+    private Integer quantity;          // ile egzemplarzy user ma
+    private String numberInSet;
+    private CardSetDto set;
+}

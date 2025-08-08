@@ -8,7 +8,11 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class UserCardInstanceDto {
-    private Long instanceId;         // ID rekordu user_card (albo po prostu unikalny indeks)
+    private Long id;
+    private String cardId;
+    private String cardName;
+    private String imageUrlSmall;
+    private String status;      // "free" lub "in_deck"
+    private Long deckId;
     private String deckName;
-    private Integer quantity;
 }

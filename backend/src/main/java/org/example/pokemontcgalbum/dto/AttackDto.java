@@ -4,6 +4,7 @@ import lombok.Data;
 
 @Data
 public class AttackDto {
+    private Long id;
     private String name;
     private String namePl;
     private String cost;

@@ -98,3 +98,38 @@ databaseChangeLog:
             relativeToChangelogFile: true
             splitStatements: true
             stripComments: true
+
+  - changeSet:
+      id: 12_add_printedtotal_total_to_cardset
+      author: piotr
+      changes:
+        - addColumn:
+            tableName: card_set
+            columns:
+              - column:
+                  name: printed_total
+                  type: INT
+              - column:
+                  name: total
+                  type: INT
+
+  - changeSet:
+      id: 13_add_number_in_set_to_tcgcard
+      author: piotr
+      changes:
+        - addColumn:
+            tableName: tcg_card
+            columns:
+              - column:
+                  name: number_in_set
+                  type: VARCHAR(16)
+  - changeSet:
+      id: 14_add_logo_url_to_deck
+      author: piotr
+      changes:
+        - addColumn:
+            tableName: decks
+            columns:
+              - column:
+                  name: logo_url
+                  type: VARCHAR(255)

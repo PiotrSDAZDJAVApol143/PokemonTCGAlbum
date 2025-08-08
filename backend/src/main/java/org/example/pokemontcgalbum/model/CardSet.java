@@ -25,6 +25,8 @@ public class CardSet {
     private String logoUrl;
     @Column(name = "symbol_url")
     private String symbolUrl;
+    private Integer printedTotal;
+    private Integer total;
     private LocalDate releaseDate;
 
     @OneToMany(mappedBy = "set")

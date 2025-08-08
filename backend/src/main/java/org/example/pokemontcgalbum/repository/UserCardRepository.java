@@ -1,6 +1,7 @@
 package org.example.pokemontcgalbum.repository;
 
 
+import org.example.pokemontcgalbum.model.CardSet;
 import org.example.pokemontcgalbum.model.TcgCard;
 import org.example.pokemontcgalbum.model.User;
 import org.example.pokemontcgalbum.model.UserCard;
@@ -19,4 +20,9 @@ public interface UserCardRepository extends JpaRepository<UserCard, String> {
         WHERE c.user = :user AND c.card.pokedexNumber IS NOT NULL
     """)
     List<Integer> findOwnedPokedexNumbersByUser(User user);
+
+    List<UserCard> findByUserAndCard_Set_Id(User user, String setId);
+
+    @Query("SELECT DISTINCT c.card.set FROM UserCard c WHERE c.user = :user AND c.card.set IS NOT NULL")
+    List<CardSet> findDistinctSetsByUser(User user);
 }

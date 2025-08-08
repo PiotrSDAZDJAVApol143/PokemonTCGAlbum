@@ -45,7 +45,7 @@ public class AuthController {
         User user = userService.findByUsername(userDetails.getUsername())
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        String accessToken = jwtUtil.generateToken(user.getUsername());
+        String accessToken = jwtUtil.generateToken(user.getUsername(), user.getRole().name());
         String refreshToken = refreshTokenService.createRefreshToken(user).getToken();
 
         return ResponseEntity.ok(new LoginResponse(accessToken, refreshToken));
@@ -60,7 +60,7 @@ public class AuthController {
             throw new RuntimeException("Refresh token expired");
         }
 
-        String accessToken = jwtUtil.generateToken(refreshToken.getUser().getUsername());
+        String accessToken = jwtUtil.generateToken(refreshToken.getUser().getUsername(), refreshToken.getUser().getRole().name());
         // Możesz odnowić refresh token (opcjonalnie, jeśli chcesz rotować tokeny) lub zostawić ten sam jeśli nie wygasł
 
         return ResponseEntity.ok(new LoginResponse(accessToken, refreshToken.getToken()));

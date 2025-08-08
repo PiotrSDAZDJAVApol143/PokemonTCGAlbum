@@ -12,6 +12,8 @@ import Login from "./pages/Login";
 import "./index.css";
 import {AuthProvider} from "./context/AuthContext.jsx";
 import CardDetails from './pages/CardDetails';
+import AlbumUserSetListView from "./pages/AlbumUserSetListView.jsx";
+import AlbumUserSetCardsView from "./pages/AlbumUserSetCardsView.jsx";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
     <BrowserRouter>
@@ -22,6 +24,8 @@ ReactDOM.createRoot(document.getElementById("root")).render(
                     <Route path="home" element={<Home/>}/>
                     <Route path="pokedex" element={<Pokedex/>}/>
                     <Route path="album" element={<Album/>}/>
+                    <Route path="/album" element={<AlbumUserSetListView />} />
+                    <Route path="/album/sets/:setId" element={<AlbumUserSetCardsView />} />
                     <Route path="/card/:cardId" element={<CardDetails />} />
                     <Route path="deck" element={<Deck/>}/>
                     <Route path="poke-game" element={<PokeGame/>}/>

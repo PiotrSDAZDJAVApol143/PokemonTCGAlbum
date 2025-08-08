@@ -50,4 +50,9 @@ public interface TcgCardRepository extends JpaRepository<TcgCard, String> {
     Page<TcgCard> findByNameContainingIgnoreCase(String name, Pageable pageable);
     Page<TcgCard> findBySet_Id(String setId, Pageable pageable);
     Page<TcgCard> findByNameContainingIgnoreCaseAndSet_Id(String name, String setId, Pageable pageable);
+
+    @Query("SELECT c FROM TcgCard c JOIN FETCH c.set")
+    List<TcgCard> findAllWithSet();
+
+    Page<TcgCard> findByNumberInSetAndSet_PrintedTotal(String numberInSet, Integer printedTotal, Pageable pageable);
 }
