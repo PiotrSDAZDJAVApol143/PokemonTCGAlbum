@@ -1,10 +1,7 @@
 package org.example.pokemontcgalbum.service;
 
 import lombok.RequiredArgsConstructor;
-import org.example.pokemontcgalbum.dto.TcgApiCardDto;
-import org.example.pokemontcgalbum.dto.TcgApiCardsResponseDto;
-import org.example.pokemontcgalbum.dto.TcgApiSetDto;
-import org.example.pokemontcgalbum.dto.TcgApiSetResponseDto;
+import org.example.pokemontcgalbum.dto.*;
 import org.example.pokemontcgalbum.repository.TcgCardRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -12,6 +9,8 @@ import reactor.core.publisher.Mono;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -52,5 +51,35 @@ public class TcgApiService {
                 .block();
 
         return response != null ? response.getData() : null;
+    }
+    public List<TcgApiSetDto> getAllSets() {
+        int apiPage = 1;
+        int pageSize = 250; // max wg API
+        List<TcgApiSetDto> all = new ArrayList<>();
+
+        while (true) {
+            final int pageNow = apiPage;
+            TcgApiSetsResponseDto resp = tcgApiWebClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/sets")
+                            .queryParam("page", pageNow)
+                            .queryParam("pageSize", pageSize)
+                            .build())
+                    .retrieve()
+                    .bodyToMono(TcgApiSetsResponseDto.class)
+                    .block();
+
+            List<TcgApiSetDto> data = (resp != null) ? resp.getData() : null;
+            if (data == null || data.isEmpty()) break;
+
+            all.addAll(data);
+            if (data.size() < pageSize) break; // ostatnia strona
+            apiPage++;
+        }
+        return all;
+    }
+
+    public Map<String, TcgApiSetDto> getAllSetsById() {
+        return getAllSets().stream().collect(Collectors.toMap(TcgApiSetDto::getId, x -> x));
     }
 }

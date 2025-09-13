@@ -2,7 +2,9 @@ package org.example.pokemontcgalbum.controller;
 
 import lombok.RequiredArgsConstructor;
 import org.example.pokemontcgalbum.dto.DeckCreateRequest;
+import org.example.pokemontcgalbum.dto.DeckDto;
 import org.example.pokemontcgalbum.dto.DeckUpdateRequest;
+import org.example.pokemontcgalbum.mapper.DeckMapper;
 import org.example.pokemontcgalbum.model.Deck;
 import org.example.pokemontcgalbum.model.User;
 import org.example.pokemontcgalbum.service.UserDeckService;
@@ -22,6 +24,7 @@ public class UserDeckController {
 
     private final UserDeckService deckService;
     private final UserService userService;
+    private final DeckMapper deckMapper;
 
     // Sprawdzaj czy userId z path == userId z tokena!
     private User getCurrentUserOrThrow(Long pathUserId) {
@@ -41,37 +44,51 @@ public class UserDeckController {
     }
 
     @GetMapping()
-    public List<Deck> getUserDecks(@PathVariable Long userId, Authentication authentication) {
-        // Sprawdź czy id usera z tokena = userId z URL
+    public List<DeckDto> getUserDecks(@PathVariable Long userId, Authentication authentication) {
         String username = authentication.getName();
         User user = userService.findByUsername(username)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
         if (!user.getId().equals(userId)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Nie możesz podglądać cudzych decków!");
         }
-        return deckService.getDecksForUser(user);
+        // Zamień encje na DTO
+        return deckService.getDecksForUser(user)
+                .stream()
+                .map(deckMapper::toDto)
+                .toList();
     }
     @PostMapping("/add")
-    public Deck addDeckToUser(@PathVariable Long userId, @RequestBody DeckCreateRequest req) {
+    public DeckDto addDeckToUser(@PathVariable Long userId, @RequestBody DeckCreateRequest req) {
         User user = getCurrentUserOrThrow(userId);
-        return deckService.createDeck(user, req);
+        Deck deck = deckService.createDeck(user, req);
+        return deckMapper.toDto(deck);
     }
     @PutMapping("/{deckId}")
-    public Deck updateDeck(@PathVariable Long userId, @PathVariable Long deckId, @RequestBody DeckUpdateRequest req) {
+    public DeckDto updateDeck(@PathVariable Long userId, @PathVariable Long deckId, @RequestBody DeckUpdateRequest req) {
         User user = getCurrentUserOrThrow(userId);
-        return deckService.updateDeck(deckId, user, req);
+        Deck updatedDeck = deckService.updateDeck(deckId, user, req);
+        return deckMapper.toDto(updatedDeck);
     }
     @DeleteMapping("/{deckId}")
     public void deleteDeck(@PathVariable Long userId, @PathVariable Long deckId) {
         User user = getCurrentUserOrThrow(userId);
         deckService.deleteDeck(deckId, user);
     }
-
-    @GetMapping("/api/user/decks")
-    public List<Deck> getMyDecks(Authentication auth) {
-        String username = auth.getName();
+    @GetMapping("/{deckId}")
+    public DeckDto getDeckById(
+            @PathVariable Long userId,
+            @PathVariable Long deckId,
+            Authentication authentication
+    ) {
+        String username = authentication.getName();
         User user = userService.findByUsername(username)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
-        return deckService.getDecksForUser(user);
+
+        if (!user.getId().equals(userId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Nie możesz podglądać cudzych decków!");
+        }
+
+        // Jeśli chcesz użyć serwisowej metody getDeckDtoById:
+        return deckService.getDeckDtoById(deckId, user);
     }
 }

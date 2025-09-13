@@ -19,10 +19,13 @@ public class Ability {
     private String description;
     @Column(length = 1000)
     private String descriptionPl;
-    @Column(name = "rating")
-    private Integer rating;
+  //  @Column(name = "rating")
+   // private Integer rating;
 
     @ManyToOne
     @JoinColumn(name = "card_id")
     private TcgCard card;
+
+    @ManyToOne(optional = false) @JoinColumn(name = "def_id")
+    private AbilityDef def;
 }

@@ -2,7 +2,9 @@ package org.example.pokemontcgalbum.service;
 
 import lombok.RequiredArgsConstructor;
 import org.example.pokemontcgalbum.dto.DeckCreateRequest;
+import org.example.pokemontcgalbum.dto.DeckDto;
 import org.example.pokemontcgalbum.dto.DeckUpdateRequest;
+import org.example.pokemontcgalbum.mapper.DeckMapper;
 import org.example.pokemontcgalbum.model.Deck;
 import org.example.pokemontcgalbum.model.User;
 import org.example.pokemontcgalbum.repository.DeckRepository;
@@ -18,6 +20,7 @@ import java.util.Optional;
 public class UserDeckService {
     private final DeckRepository deckRepository;
     private final UserRepository userRepository;
+    private final DeckMapper deckMapper;
 
     public Deck createDeck(User user, DeckCreateRequest req) {
         System.out.println("Tworzenie decka dla usera: " + user.getId() + " - " + req.getName());
@@ -53,10 +56,16 @@ public class UserDeckService {
         return deck;
     }
 
+    public DeckDto getDeckDtoById(Long id, User user) {
+        Deck deck = getDeckById(id, user);
+        return deckMapper.toDto(deck);
+    }
     public Deck getDeckById(Long id, User user) {
         Deck deck = deckRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Deck not found"));
-        if (!deck.getUser().getId().equals(user.getId())) throw new RuntimeException("Forbidden");
+        if (!deck.getUser().getId().equals(user.getId())) {
+            throw new RuntimeException("Forbidden");
+        }
         return deck;
     }
 

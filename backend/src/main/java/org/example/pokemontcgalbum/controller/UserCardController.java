@@ -22,90 +22,71 @@ public class UserCardController {
 
     @GetMapping("/search")
     public PageUserCardsDto searchUserCards(
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size,
+            @RequestParam int page,
+            @RequestParam int size,
             @RequestParam(required = false) String name,
-            @RequestParam(required = false) String setId
-    ) {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || !auth.isAuthenticated() || "anonymousUser".equals(auth.getName())) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Not logged in");
-        }
-        String username = auth.getName();
-        User user = userService.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-        return userCardService.searchUserCards(user, page, size, name, setId);
+            @RequestParam(required = false) String setId,
+            @RequestParam(required = false, defaultValue = "recent") String sort) {
+        User user = getAuthenticatedUser();
+        return userCardService.searchUserCards(user, page, size, name, setId, sort);
     }
 
     @GetMapping("/details/{cardId}")
     public UserCardDetailsDto getCardDetailsForUser(@PathVariable String cardId) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        String username = authentication.getName();
-
-        User user = userService.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("User not found!"));
-
+        User user = getAuthenticatedUser();
         return userCardService.getCardDetailsForUser(cardId, user);
     }
 
     @GetMapping("/sets")
     public List<UserSetProgressDto> getUserSets() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || !auth.isAuthenticated() || "anonymousUser".equals(auth.getName())) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Not logged in");
-        }
-        String username = auth.getName();
-        User user = userService.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+        User user = getAuthenticatedUser();
         return userCardService.findSetsForUserWithProgress(user);
     }
 
     @PostMapping("/add")
     public void addUserCard(@RequestBody AddUserCardRequest request) {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || !auth.isAuthenticated() || "anonymousUser".equals(auth.getName())) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Not logged in");
-        }
-        String username = auth.getName();
-        User user = userService.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-        userCardService.addCardToUser(user, request.getCardId(), request.getQuantity());
+        User user = getAuthenticatedUser();
+        userCardService.addCardInstances(user, request.getCardId(), request.getQuantity());
     }
 
     @PostMapping("/add-instance")
     public void addInstance(@RequestBody AddUserCardRequest request) {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        String username = auth.getName();
-        User user = userService.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-        userCardService.addCardInstance(user, request.getCardId());
+        User user = getAuthenticatedUser();
+        userCardService.addCardInstances(user, request.getCardId(), 1);
     }
-
 
     @DeleteMapping("/instance/{instanceId}")
     public void removeInstance(@PathVariable Long instanceId) {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        String username = auth.getName();
-        User user = userService.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+        User user = getAuthenticatedUser();
         userCardService.removeCardInstance(user, instanceId);
     }
 
+    @DeleteMapping("/remove")
+    public void removeUserCard(@RequestBody AddUserCardRequest request) {
+        User user = getAuthenticatedUser();
+        userCardService.removeCardInstances(user, request.getCardId(), request.getQuantity());
+    }
+
+    // Przypisz instancję do talii
     @PostMapping("/instance/{instanceId}/assign-to-deck")
     public void assignToDeck(@PathVariable Long instanceId, @RequestBody DeckAssignRequest req) {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        String username = auth.getName();
-        User user = userService.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+        User user = getAuthenticatedUser();
         userCardService.assignInstanceToDeck(user, instanceId, req.getDeckId());
     }
 
     @PostMapping("/instance/{instanceId}/remove-from-deck")
     public void removeFromDeck(@PathVariable Long instanceId) {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        String username = auth.getName();
-        User user = userService.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+        User user = getAuthenticatedUser();
         userCardService.removeInstanceFromDeck(user, instanceId);
+    }
+
+    private User getAuthenticatedUser() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated() || "anonymousUser".equals(auth.getName())) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Not logged in");
+        }
+        String username = auth.getName();
+        return userService.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("User not found"));
     }
 }

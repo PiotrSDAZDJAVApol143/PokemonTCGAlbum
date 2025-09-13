@@ -16,9 +16,10 @@ export default function AlbumUserSetCardsView({
     const navigate = useNavigate();
 
     useEffect(() => {
-        api.get("/user-cards/search", {
-            params: { setId, page, size: 10, name: search },
-        }).then(res => {
+        const safePage = Number.isFinite(page) ? page : 0;
+          api.get("/user-cards/search", {
+                  params: { setId, page: safePage, size: 10, name: search },
+          }).then(res => {
             setCards(res.data.content);
             setTotalPages(res.data.totalPages);
         });
@@ -31,6 +32,8 @@ export default function AlbumUserSetCardsView({
             setSetInfo(set || null);
         });
     }, [setId]);
+
+
 
     return (
         <div className="flex flex-col min-h-screen bg-[#f7f8fa] overflow-hidden">

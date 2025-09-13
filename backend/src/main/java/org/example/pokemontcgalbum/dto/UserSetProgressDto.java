@@ -10,5 +10,6 @@ public class UserSetProgressDto {
     private String logoUrl;
     private int unlocked; // ile unikalnych kart usera
     private int total;
+    private String releaseDate;
 }
 

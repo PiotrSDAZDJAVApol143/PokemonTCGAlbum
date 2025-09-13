@@ -1,7 +1,6 @@
 package org.example.pokemontcgalbum.dto;
 
 import lombok.Data;
-import org.example.pokemontcgalbum.model.CardSet;
 
 import java.util.List;
 

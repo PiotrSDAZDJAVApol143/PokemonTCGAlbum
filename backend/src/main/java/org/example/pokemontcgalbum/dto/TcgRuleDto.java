@@ -8,4 +8,5 @@ public class TcgRuleDto {
     private String text;
     private String textPl;
     private Integer rating;
+    private Long defId;
 }

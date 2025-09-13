@@ -1,5 +1,6 @@
 package org.example.pokemontcgalbum.mapper;
 
+import lombok.Builder;
 import org.example.pokemontcgalbum.dto.CardSetDto;
 import org.example.pokemontcgalbum.model.CardSet;
 import org.springframework.stereotype.Component;

@@ -12,5 +12,7 @@ public class AttackDto {
     private String description;
     private String descriptionPl;
     private Boolean special;
-    private Integer rating;
+    private Long defId;
+    private Integer defRating;
+
 }

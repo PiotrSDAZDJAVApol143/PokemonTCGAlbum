@@ -1,12 +1,14 @@
 package org.example.pokemontcgalbum.service;
 
 import lombok.RequiredArgsConstructor;
+import org.example.pokemontcgalbum.dto.TcgApiCardDto;
 import org.example.pokemontcgalbum.mapper.TcgCardMapper;
 import org.example.pokemontcgalbum.model.CardSet;
 import org.example.pokemontcgalbum.model.TcgCard;
 import org.example.pokemontcgalbum.repository.CardSetRepository;
 import org.example.pokemontcgalbum.repository.TcgCardRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -15,6 +17,7 @@ public class TcgImportService {
     private final CardSetRepository cardSetRepository;
     private final TcgCardRepository cardRepository;
     private final TcgCardMapper cardMapper;
+    private final DefinitionBindingService defBinder;
 
     public int importAllTcgCards() {
         var allCards = tcgApiService.getAllCards();  // pobiera wszystko z paginacją!
@@ -53,6 +56,12 @@ public class TcgImportService {
             }
         }
         return imported;
+    }
+    @Transactional
+    public TcgCard importOne(TcgApiCardDto dto) {
+        TcgCard card = cardMapper.toEntity(dto);
+        defBinder.bindAllDefs(card);
+        return cardRepository.save(card);
     }
 }
 

@@ -22,10 +22,10 @@ public class Attack {
     @Column(length = 1000)
     private String descriptionPl; // <-- nowość
     private Boolean special;
-    @Column(name = "rating")
-    private Integer rating;
-
     @ManyToOne
     @JoinColumn(name = "card_id")
     private TcgCard card;
+
+    @ManyToOne(optional = false) @JoinColumn(name = "def_id")
+    private AttackDef def;
 }

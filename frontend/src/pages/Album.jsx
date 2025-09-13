@@ -14,6 +14,10 @@ export default function Album() {
     const location = useLocation();
 
     // Który widok?
+
+    const [userSetCardsPage, setUserSetCardsPage] = useState(0);
+    const [userSetCardsSearch, setUserSetCardsSearch] = useState("");
+
     const [step, setStep] = useState(null);
     const [selectedSet, setSelectedSet] = useState(null);
 
@@ -27,49 +31,136 @@ export default function Album() {
     const [albumPage, setAlbumPage] = useState(0);
     const [albumSearch, setAlbumSearch] = useState("");
 
-    // Przechwytujemy stan przy powrocie z CardDetails
-    useEffect(() => {
-        if (location.state?.step === "set-cards") {
-            setStep("set-cards");
-            setSelectedSet(location.state.setId);
-            setSetPageIdx(location.state.page ?? 0);
-            setSetSearch(location.state.search ?? "");
-        }
-        if (location.state?.step === "all") {
-            setStep("all");
-            setAlbumPage(location.state.page ?? 0);
-            setAlbumSearch(location.state.search ?? "");
-        }
-    }, [location.state]);
+    function AlbumChoice({
+                             title,
+                             subtitle,
+                             disabled = false,
+                             onClick,
+                             bg
+                         }) {
+        const [hover, setHover] = useState(false);
 
-    // Panel startowy (wybór przeglądu)
-    if (!step) {
+        // szybsze wybielanie przy wyjechaniu kursorem, wolniejsze “nabieranie kolorów”
+        const duration = hover ? "duration-700" : "duration-150";
         return (
-            <div className="flex justify-center gap-20 p-16">
-                <div className="flex-1 flex flex-col items-center">
-                    <h2 className="text-2xl font-bold mb-2">Wyświetl karty Pokemon TCG</h2>
-                    <button className="border-2 rounded-[20px] px-16 py-4 text-xl font-bold hover:bg-gray-100 mb-2"
-                            onClick={() => setStep("browse")}>
-                        WYBIERZ
-                    </button>
-                    <span className="font-bold">Przeglądaj wszystkie oficjalne karty Pokemon</span>
-                </div>
-                <div className="w-[2px] bg-gray-400"></div>
-                <div className="flex-1 flex flex-col items-center">
-                    <h2 className="text-2xl font-bold mb-2">Wyświetl Twój Album Pokemon TCG</h2>
-                    <button className="border-2 rounded-[20px] px-16 py-4 text-xl font-bold mb-2
-                        disabled:opacity-40 disabled:cursor-not-allowed
-                        hover:bg-gray-100"
-                            disabled={!user}
-                            onClick={() => user && setStep("user")}
+            <div
+                className={`relative group flex-1 h-[60vh] rounded-2xl overflow-hidden shadow-xl
+                  ring-1 ring-black/10`}
+                onMouseEnter={() => setHover(true)}
+                onMouseLeave={() => setHover(false)}
+            >
+                {/* TŁO */}
+                <div
+                    className={`absolute inset-0 bg-center bg-cover transition-all ${duration}
+                    ${hover ? "grayscale-0 brightness-100 opacity-100"
+                        : "grayscale brightness-125 opacity-70"}`}
+                    style={{ backgroundImage: `url(${bg})` }}
+                />
+
+                {/* MGŁA / miękkie krawędzie (delikatna winieta + blend na środku) */}
+                <div
+                    className="pointer-events-none absolute inset-0"
+                    style={{
+                        boxShadow: "inset 0 0 140px 70px rgba(255,255,255,0.85)",
+                    }}
+                />
+                {/* rozjaśnienie krawędzi wewnętrznych (żeby dwa panele się zlewały) */}
+                <div
+                    className="pointer-events-none absolute inset-y-0 left-0 w-1/2"
+                    style={{
+                        background:
+                            "linear-gradient(to right, rgba(255,255,255,0.75), rgba(255,255,255,0))",
+                    }}
+                />
+                <div
+                    className="pointer-events-none absolute inset-y-0 right-0 w-1/2"
+                    style={{
+                        background:
+                            "linear-gradient(to left, rgba(255,255,255,0.75), rgba(255,255,255,0))",
+                    }}
+                />
+
+                {/* TREŚĆ */}
+                <div className="relative z-10 flex flex-col items-center justify-center h-full text-center">
+                    <h2 className="text-2xl font-extrabold drop-shadow-sm text-gray-900">
+                        {title}
+                    </h2>
+
+                    <button
+                        className={`mt-4 px-10 py-3 rounded-xl text-lg font-bold transition
+                      bg-white/90 hover:bg-white shadow
+                      disabled:opacity-40 disabled:cursor-not-allowed`}
+                        disabled={disabled}
+                        onClick={onClick}
                     >
                         WYBIERZ
                     </button>
-                    <span className="font-bold">Podgląd Twojej kolekcji</span>
+
+                    <div className="mt-3 font-semibold text-gray-800 drop-shadow-sm">
+                        {subtitle}
+                    </div>
                 </div>
             </div>
         );
     }
+        // Przechwytujemy stan przy powrocie z CardDetails
+    useEffect(() => {
+        const s = location.state?.step;
+        if (!s) return;
+
+        if (s === "set-cards") {
+            setStep("set-cards");
+            setSelectedSet(location.state.setId);
+            setSetPageIdx(location.state.page ?? 0);
+            setSetSearch(location.state.search ?? "");
+        } else if (s === "all") {
+            setStep("all");
+            setAlbumPage(location.state.page ?? 0);
+            setAlbumSearch(location.state.search ?? "");
+        } else if (s === "user-all") {
+            setStep("user-all");
+            setUserAlbumPage(location.state.page ?? 0);
+            setUserAlbumSearch(location.state.search ?? "");
+        } else if (s === "user-set-cards") {
+            setStep("user-set-cards");
+            setSelectedSet(location.state.setId);
+            setUserSetCardsPage(location.state.page ?? 0);
+            setUserSetCardsSearch(location.state.search ?? "");
+        }
+    }, [location.state]);
+
+    // Panel startowy (wybór przeglądu)
+        if (!step) {
+            return (
+                <div className="px-10 py-12">
+                    <div className="mx-auto max-w-40vh">
+                        <div className="grid grid-cols-[1fr_2px_1fr] gap-8 items-stretch">
+
+                            {/* LEWA KOLUMNA – wszystkie karty */}
+                            <AlbumChoice
+                                title="Wyświetl karty Pokemon TCG"
+                                subtitle="Przeglądaj wszystkie oficjalne karty Pokemon"
+                                bg="/album_all.png"            // <- wrzuć plik do /public
+                                onClick={() => setStep("browse")}
+                            />
+
+                            {/* rozdzielacz */}
+                            <div className="bg-gray-300 rounded-full" />
+
+                            {/* PRAWA KOLUMNA – album użytkownika */}
+                            <AlbumChoice
+                                title="Wyświetl Twój Album Pokemon TCG"
+                                subtitle="Podgląd Twojej kolekcji"
+                                bg="/album_user.png"           // <- wrzuć plik do /public
+                                disabled={!user}
+                                onClick={() => user && setStep("user")}
+                            />
+
+                        </div>
+                    </div>
+                </div>
+            );
+        }
 
     // Przeglądanie — wybór typu przeglądu
     if (step === "browse") {
@@ -182,17 +273,18 @@ export default function Album() {
             />
         );
     }
-    // Karty z danego setu
+
     if (step === "user-set-cards") {
         return (
             <AlbumUserSetCardsView
                 setId={selectedSet}
                 goBack={() => setStep("user-sets")}
-                // paginacja/search jeśli chcesz
+                page={userSetCardsPage}
+                setPage={setUserSetCardsPage}
+                search={userSetCardsSearch}
+                setSearch={setUserSetCardsSearch}
             />
         );
     }
-
-    // Fallback (nie powinien się wywołać)
     return null;
 }

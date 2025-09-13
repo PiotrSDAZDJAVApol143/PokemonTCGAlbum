@@ -10,6 +10,7 @@ public class DeckDto {
     private String name;
     private String baseEnergy;
     private String secondaryEnergy;
+    private String logoUrl;
     private List<DeckCardDto> cards;
 
 }

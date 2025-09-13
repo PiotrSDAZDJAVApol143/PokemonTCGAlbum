@@ -133,3 +133,398 @@ databaseChangeLog:
               - column:
                   name: logo_url
                   type: VARCHAR(255)
+  - changeSet:
+      id: 15_create_table_user_card_instance
+      author: piotr
+      changes:
+        - sqlFile:
+            path: scripts/15_create_table_user_card_instance.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+            stripComments: true
+  - changeSet:
+      id: 16_migrate_user_cards_to_instances
+      author: piotr
+      changes:
+        - sqlFile:
+            path: scripts/16_migrate_user_cards_to_instances.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+            stripComments: true
+            endDelimiter: $$
+  - changeSet:
+      id: 17_create_table_attack_ability_def
+      author: piotr
+      changes:
+        - sqlFile:
+            path: scripts/17_create_table_attack_ability_def.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+            stripComments: true
+  - changeSet:
+      id: 17b_alter_attack_def_add_damage
+      author: piotr
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            columnExists:
+              tableName: attack_def
+              columnName: damage_text
+      changes:
+        - addColumn:
+            tableName: attack_def
+            columns:
+              - column:
+                  name: damage_text
+                  type: VARCHAR(32)
+
+  - changeSet:
+      id: 17c_widen_attack_def_canonical_key
+      author: piotr
+      preConditions:
+        - onFail: MARK_RAN
+        - sqlCheck:
+            expectedResult: "1"
+            sql: "SELECT CASE WHEN (SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME='attack_def' AND COLUMN_NAME='canonical_key') < 512 THEN 1 ELSE 0 END"
+      changes:
+        - modifyDataType:
+            tableName: attack_def
+            columnName: canonical_key
+            newDataType: VARCHAR(512)
+
+  - changeSet:
+      id: 17d_recreate_uq_attack_def_canonical
+      author: piotr
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: MARK_RAN
+        # wykonaj tylko, jeśli faktycznie istnieje constraint/indeks o tej nazwie
+        - or:
+            - uniqueConstraintExists:
+                tableName: attack_def
+                constraintName: uq_attack_def_canonical
+            - indexExists:
+                tableName: attack_def
+                indexName: uq_attack_def_canonical
+      changes:
+        - dropUniqueConstraint:
+            tableName: attack_def
+            constraintName: uq_attack_def_canonical
+        - addUniqueConstraint:
+            tableName: attack_def
+            columnNames: canonical_key
+            constraintName: uq_attack_def_canonical
+  - changeSet:
+      id: 18a_add_def_id_to_attack
+      author: piotr
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            columnExists:
+              tableName: attack
+              columnName: def_id
+      changes:
+        - addColumn:
+            tableName: attack
+            columns:
+              - column:
+                  name: def_id
+                  type: BIGINT
+
+  - changeSet:
+      id: 18b_add_def_id_to_ability
+      author: piotr
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            columnExists:
+              tableName: ability
+              columnName: def_id
+      changes:
+        - addColumn:
+            tableName: ability
+            columns:
+              - column:
+                  name: def_id
+                  type: BIGINT
+  - changeSet:
+      id: 19_backfill_defs
+      author: piotr
+      preConditions:
+        - onFail: MARK_RAN
+      changes:
+        - sqlFile:
+            path: scripts/19_backfill_defs.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+            stripComments: true
+  - changeSet:
+      id: 19c_fix_allow_null_attack_def
+      author: piotr
+      preConditions:
+        - onFail: MARK_RAN
+        - sqlCheck:
+            expectedResult: "1"
+            sql: |
+              SELECT CASE WHEN EXISTS (
+                SELECT 1
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = 'attack'
+                  AND COLUMN_NAME = 'def_id'
+                  AND IS_NULLABLE = 'NO'
+              ) THEN '1' ELSE '0' END
+      changes:
+        - dropNotNullConstraint:
+            tableName: attack
+            columnName: def_id
+            columnDataType: BIGINT
+
+  - changeSet:
+      id: 19d_fix_allow_null_ability_def
+      author: piotr
+      preConditions:
+        - onFail: MARK_RAN
+        - sqlCheck:
+            expectedResult: "1"
+            sql: |
+              SELECT CASE WHEN EXISTS (
+                SELECT 1
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = 'ability'
+                  AND COLUMN_NAME = 'def_id'
+                  AND IS_NULLABLE = 'NO'
+              ) THEN '1' ELSE '0' END
+      changes:
+        - dropNotNullConstraint:
+            tableName: ability
+            columnName: def_id
+            columnDataType: BIGINT
+  - changeSet:
+      id: 19e_zero_to_null_attack_def
+      author: piotr
+      preConditions:
+        - onFail: MARK_RAN
+        - sqlCheck:
+            expectedResult: "1"
+            sql: "SELECT CASE WHEN EXISTS (SELECT 1 FROM attack WHERE def_id = 0) THEN 1 ELSE 0 END"
+      changes:
+        - sql:
+            sql: "UPDATE attack SET def_id = NULL WHERE def_id = 0"
+
+  - changeSet:
+      id: 19f_zero_to_null_ability_def
+      author: piotr
+      preConditions:
+        - onFail: MARK_RAN
+        - sqlCheck:
+            expectedResult: "1"
+            sql: "SELECT CASE WHEN EXISTS (SELECT 1 FROM ability WHERE def_id = 0) THEN 1 ELSE 0 END"
+      changes:
+        - sql:
+            sql: "UPDATE ability SET def_id = NULL WHERE def_id = 0"
+  - changeSet:
+      id: 19g_move_ratings_to_defs
+      author: piotr
+      preConditions:
+        - onFail: MARK_RAN
+        - and:
+            - columnExists:
+                tableName: attack
+                columnName: rating
+            - columnExists:
+                tableName: ability
+                columnName: rating
+      changes:
+        - sqlFile:
+            path: scripts/19g_move_ratings_to_defs.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+            stripComments: true
+  - changeSet:
+      id: 20a_fk_attack_def
+      author: piotr
+      preConditions:
+        - onFail: HALT
+        - not:
+            foreignKeyConstraintExists:
+              foreignKeyName: fk_attack_def
+        - sqlCheck:
+            expectedResult: "0"
+            sql: |
+              SELECT COUNT(*)
+              FROM attack a
+              LEFT JOIN attack_def d ON d.id = a.def_id
+              WHERE a.def_id IS NOT NULL
+                AND a.def_id <> 0
+                AND d.id IS NULL
+      changes:
+        - addForeignKeyConstraint:
+            baseTableName: attack
+            baseColumnNames: def_id
+            referencedTableName: attack_def
+            referencedColumnNames: id
+            constraintName: fk_attack_def
+            onDelete: RESTRICT
+
+  - changeSet:
+      id: 20b_fk_ability_def
+      author: piotr
+      preConditions:
+        - onFail: HALT
+        - not:
+            foreignKeyConstraintExists:
+              foreignKeyName: fk_ability_def
+        - sqlCheck:
+            expectedResult: "0"
+            sql: |
+              SELECT COUNT(*)
+              FROM ability ab
+              LEFT JOIN ability_def d ON d.id = ab.def_id
+              WHERE ab.def_id IS NOT NULL
+                AND ab.def_id <> 0
+                AND d.id IS NULL
+      changes:
+        - addForeignKeyConstraint:
+            baseTableName: ability
+            baseColumnNames: def_id
+            referencedTableName: ability_def
+            referencedColumnNames: id
+            constraintName: fk_ability_def
+            onDelete: RESTRICT
+  - changeSet:
+      id: 21_make_def_id_not_null
+      author: piotr
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - sqlCheck:
+            expectedResult: "0"
+            sql: "SELECT COUNT(*) FROM attack WHERE def_id IS NULL OR def_id = 0"
+        - sqlCheck:
+            expectedResult: "0"
+            sql: "SELECT COUNT(*) FROM ability WHERE def_id IS NULL OR def_id = 0"
+      changes:
+        - addNotNullConstraint:
+            tableName: attack
+            columnName: def_id
+            columnDataType: BIGINT
+        - addNotNullConstraint:
+            tableName: ability
+            columnName: def_id
+            columnDataType: BIGINT
+  - changeSet:
+      id: 22a_drop_attack_rating
+      author: piotr
+      preConditions:
+        - onFail: MARK_RAN
+        - columnExists:
+            tableName: attack
+            columnName: rating
+      changes:
+        - dropColumn:
+            tableName: attack
+            columnName: rating
+  - changeSet:
+      id: 22b_drop_ability_rating
+      author: piotr
+      preConditions:
+        - onFail: MARK_RAN
+        - columnExists:
+            tableName: ability
+            columnName: rating
+      changes:
+        - dropColumn:
+            tableName: ability
+            columnName: rating
+  - changeSet:
+      id: 23_create_table_rule_def
+      author: piotr
+      changes:
+        - createTable:
+            tableName: rule_def
+            columns:
+              - column: { name: id, type: BIGINT AUTO_INCREMENT, constraints: { primaryKey: true } }
+              - column: { name: name, type: VARCHAR(255), constraints: { nullable: false } }
+              - column: { name: name_pl, type: VARCHAR(255) }
+              - column: { name: description, type: VARCHAR(1000) }
+              - column: { name: description_pl, type: VARCHAR(1000) }
+              - column: { name: canonical_key, type: VARCHAR(512), constraints: { nullable: false } }
+              - column: { name: rating, type: INT }
+        - addUniqueConstraint:
+            tableName: rule_def
+            columnNames: canonical_key
+            constraintName: uq_rule_def_canonical
+  - changeSet:
+      id: 23b_shrink_rule_def_canonical_key
+      author: piotr
+      preConditions:
+        - onFail: MARK_RAN
+      changes:
+        - modifyDataType:
+            tableName: rule_def
+            columnName: canonical_key
+            newDataType: VARCHAR(64)
+  - changeSet:
+      id: 24_add_def_id_to_tcg_rule
+      author: piotr
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            columnExists:
+              tableName: tcg_rule
+              columnName: def_id
+      changes:
+        - addColumn:
+            tableName: tcg_rule
+            columns:
+              - column: { name: def_id, type: BIGINT }
+
+  - changeSet:
+      id: 25_backfill_rule_defs
+      author: piotr
+      changes:
+        - sqlFile:
+            path: scripts/25_backfill_rule_defs.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+            stripComments: true
+
+  - changeSet:
+      id: 26_fk_rule_def
+      author: piotr
+      preConditions:
+        - onFail: HALT
+        - not:
+            foreignKeyConstraintExists:
+              foreignKeyName: fk_rule_def
+        - sqlCheck:
+            expectedResult: "0"
+            sql: |
+              SELECT COUNT(*)
+              FROM tcg_rule r
+              LEFT JOIN rule_def d ON d.id = r.def_id
+              WHERE r.def_id IS NOT NULL
+                AND d.id IS NULL
+      changes:
+        - addForeignKeyConstraint:
+            baseTableName: tcg_rule
+            baseColumnNames: def_id
+            referencedTableName: rule_def
+            referencedColumnNames: id
+            constraintName: fk_rule_def
+            onDelete: RESTRICT
+
+  - changeSet:
+      id: 27_drop_tcg_rule_rating
+      author: piotr
+      preConditions:
+        - onFail: MARK_RAN
+        - columnExists:
+            tableName: tcg_rule
+            columnName: rating
+      changes:
+        - dropColumn:
+            tableName: tcg_rule
+            columnName: rating

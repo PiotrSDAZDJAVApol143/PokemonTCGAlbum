@@ -6,6 +6,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 
@@ -54,5 +55,36 @@ public interface TcgCardRepository extends JpaRepository<TcgCard, String> {
     @Query("SELECT c FROM TcgCard c JOIN FETCH c.set")
     List<TcgCard> findAllWithSet();
 
+    @Query(
+            value = """
+        select flavor_text_pl 
+        from tcg_card 
+        where pokedex_number = :num and flavor_text_pl is not null
+        order by rand() 
+        limit 1
+      """,
+            nativeQuery = true)
+    String findRandomFlavorPlByPokedex(@Param("num") Integer num);
+
+    // fallback, gdy PL brak:
+    @Query(
+            value = """
+        select flavor_text 
+        from tcg_card 
+        where pokedex_number = :num and flavor_text is not null
+        order by rand() 
+        limit 1
+      """,
+            nativeQuery = true)
+    String findRandomFlavorEnByPokedex(@Param("num") Integer num);
+
+    @Query("""
+   SELECT c FROM TcgCard c
+   WHERE c.supertype = 'Pokémon' AND c.pokedexNumber IS NOT NULL
+""")
+    List<TcgCard> findAllPokemonWithDex();
+
     Page<TcgCard> findByNumberInSetAndSet_PrintedTotal(String numberInSet, Integer printedTotal, Pageable pageable);
+
+    Page<TcgCard> findByNumberInSetIgnoreCase(String numberInSet, Pageable pageable);
 }

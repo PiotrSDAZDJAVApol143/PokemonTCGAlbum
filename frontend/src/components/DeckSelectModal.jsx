@@ -9,16 +9,8 @@ export default function DeckSelectModal({ onSelect, onCancel }) {
         // Pobierz decki usera – zmień endpoint, jeśli masz inny!
         api.get("/user/decks")
             .then(res => {
-                // Dodaj loga poniżej:
                 console.log("USER DECKS response:", res.data);
-
-                // Jeżeli odpowiedź to tablica -> OK
-                // Jeżeli nie -> szukaj tablicy wewnątrz (np. res.data.decks albo res.data.content), albo daj pustą
-                setDecks(
-                    Array.isArray(res.data)
-                        ? res.data
-                        : (res.data.decks || res.data.content || [])
-                );
+                setDecks(Array.isArray(res.data) ? res.data : (res.data.decks || res.data.content || []));
             })
             .catch(() => setDecks([]));
     }, []);
@@ -30,8 +22,8 @@ export default function DeckSelectModal({ onSelect, onCancel }) {
                 <div className="text-lg font-bold mb-4">Wybierz talię do przypisania karty</div>
                 <select
                     className="border px-4 py-2 rounded w-full"
-                    value={selected || ""}
-                    onChange={e => setSelected(e.target.value)}
+                    value={selected ?? ""}
+                    onChange={e => setSelected(Number(e.target.value) || null)}  // <--- Number()
                 >
                     <option value="">-- Wybierz talię --</option>
                     {decks.map(deck => (
@@ -42,12 +34,15 @@ export default function DeckSelectModal({ onSelect, onCancel }) {
                     <button
                         className="bg-gray-200 px-4 py-2 rounded"
                         onClick={onCancel}
-                    >Anuluj</button>
+                    >Anuluj
+                    </button>
                     <button
                         className="bg-blue-500 text-white px-4 py-2 rounded"
                         disabled={!selected}
                         onClick={() => onSelect(selected)}
-                    >Przypisz</button>
+                    >
+                        Przypisz
+                    </button>
                 </div>
             </div>
         </div>

@@ -2,17 +2,20 @@ package org.example.pokemontcgalbum.service;
 
 import lombok.RequiredArgsConstructor;
 import org.example.pokemontcgalbum.dto.CardTranslationImport;
+import org.example.pokemontcgalbum.mapper.CardRatingCalculator;
+import org.example.pokemontcgalbum.model.AbilityDef;
+import org.example.pokemontcgalbum.model.AttackDef;
 import org.example.pokemontcgalbum.model.TcgCard;
-import org.example.pokemontcgalbum.repository.AbilityRepository;
-import org.example.pokemontcgalbum.repository.AttackRepository;
-import org.example.pokemontcgalbum.repository.TcgCardRepository;
-import org.example.pokemontcgalbum.repository.TcgRuleRepository;
+import org.example.pokemontcgalbum.repository.*;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
@@ -21,19 +24,41 @@ public class TcgCardService {
     private final AttackRepository attackRepository;
     private final AbilityRepository abilityRepository;
     private final TcgRuleRepository tcgRuleRepository;
+    private final CardRatingCalculator ratingCalculator;
+    private final DefinitionBindingService defBinder;
+    private final AbilityDefRepository abilityDefRepository;
+    private final AttackDefRepository attackDefRepository;
+    private final RuleDefRepository ruleDefRepository;
 
     public void setAttackRating(Long attackId, int rating) {
         var attack = attackRepository.findById(attackId)
                 .orElseThrow(() -> new RuntimeException("Attack not found"));
-        attack.setRating(rating);
-        attackRepository.save(attack);
+        var def = attack.getDef();
+        if (def == null) throw new RuntimeException("AttackDef missing for attack " + attackId);
+        def.setRating(rating);
+        attackDefRepository.save(def);
     }
 
     public void setAbilityRating(Long abilityId, int rating) {
         var ability = abilityRepository.findById(abilityId)
                 .orElseThrow(() -> new RuntimeException("Ability not found"));
-        ability.setRating(rating);
-        abilityRepository.save(ability);
+        var def = ability.getDef();
+        if (def == null) throw new RuntimeException("AbilityDef missing for ability " + abilityId);
+        def.setRating(rating);
+        abilityDefRepository.save(def);
+    }
+    public void setAttackDefRating(Long defId, int rating) {
+        var def = attackDefRepository.findById(defId)
+                .orElseThrow(() -> new RuntimeException("AttackDef not found"));
+        def.setRating(rating);
+        attackDefRepository.save(def);
+    }
+
+    public void setAbilityDefRating(Long defId, int rating) {
+        var def = abilityDefRepository.findById(defId)
+                .orElseThrow(() -> new RuntimeException("AbilityDef not found"));
+        def.setRating(rating);
+        abilityDefRepository.save(def);
     }
 
     public void setCardRating(String cardId, int rating) {
@@ -59,11 +84,16 @@ public class TcgCardService {
         abilityRepository.save(ability);
     }
 
+
     public void setRuleRating(Long ruleId, int rating) {
         var rule = tcgRuleRepository.findById(ruleId)
                 .orElseThrow(() -> new RuntimeException("Rule not found"));
-        rule.setRating(rating);
-        tcgRuleRepository.save(rule);
+        var def = rule.getDef();
+        if (def == null) { // awaryjnie zbinduj, gdyby coś było niepodpięte
+            def = defBinder.attachRuleDef(rule);
+        }
+        def.setRating(rating);
+        ruleDefRepository.save(def);
     }
 
     public void updateRuleTranslation(Long ruleId, String textPl) {
@@ -149,11 +179,64 @@ public class TcgCardService {
     }
 
     public TcgCard save(TcgCard card) {
+        defBinder.bindAllDefs(card);
         return cardRepository.save(card);
     }
 
     public void deleteById(String id) {
         cardRepository.deleteById(id);
+    }
+
+    private static final Pattern CODE = Pattern.compile("(?i)^([A-Z]*\\d{1,3})\\s*/\\s*([A-Z]*\\d{1,3})$");
+
+    private static String onlyDigits(String s) { return s == null ? null : s.replaceAll("\\D+", ""); }
+    private static Integer parseIntOrNull(String s) {
+        try { return (s == null || s.isBlank()) ? null : Integer.parseInt(s); } catch (Exception e) { return null; }
+    }
+
+    /**
+     * Sprytne szukanie na potrzeby panelu „Dodaj kartę”.
+     * Obsługuje: "TG03/TG30", "TG03", "10tg/TG03", zwykłą nazwę.
+     */
+    public Page<TcgCard> searchForAddPanel(String q, Pageable pageable) {
+        if (q == null || q.isBlank()) {
+            return cardRepository.findAll(pageable);
+        }
+        String s = q.trim();
+
+        // 1) Format z ukośnikiem, np. "TG03/TG30" albo "10tg/TG03"
+        Matcher m = CODE.matcher(s);
+        if (m.matches()) {
+            String left  = m.group(1).toUpperCase(); // np. TG03 lub 10TG
+            String right = m.group(2).toUpperCase(); // np. TG30 lub TG03
+
+            // Spróbuj wariantu NUM/TOTAL (TG03/TG30)
+            Integer totalDigits = parseIntOrNull(onlyDigits(right)); // 30
+            if (totalDigits != null) {
+                Page<TcgCard> p = cardRepository.findByNumberInSetAndSet_PrintedTotal(left, totalDigits, pageable);
+                if (!p.isEmpty()) return p;
+            }
+
+            // Spróbuj wariantu odwrotnego (SETLUBTOTAL/NUM → 10tg/TG03)
+            totalDigits = parseIntOrNull(onlyDigits(left));
+            if (totalDigits != null) {
+                Page<TcgCard> p = cardRepository.findByNumberInSetAndSet_PrintedTotal(right, totalDigits, pageable);
+                if (!p.isEmpty()) return p;
+            }
+
+            // Ostatecznie: szukaj tylko po numerze w secie (TG03)
+            Page<TcgCard> p = cardRepository.findByNumberInSetIgnoreCase(left, pageable);
+            if (!p.isEmpty()) return p;
+            return cardRepository.findByNumberInSetIgnoreCase(right, pageable);
+        }
+
+        // 2) Pojedynczy token z literami i cyframi: "TG03"
+        if (s.matches("(?i)^[A-Z]*\\d{1,3}$")) {
+            return cardRepository.findByNumberInSetIgnoreCase(s, pageable);
+        }
+
+        // 3) Fallback: zwykła nazwa
+        return cardRepository.findByNameContainingIgnoreCase(s, pageable);
     }
 
     public Page<TcgCard> findByNumberInSetAndPrintedTotal(String numberInSet, String printedTotal, Pageable pageable) {
@@ -178,5 +261,32 @@ public class TcgCardService {
             // Jeśli nie liczba, zwraca oryginał
             return number;
         }
+    }
+    public int recalcAndSaveCardRating(String cardId) {
+        TcgCard card = cardRepository.findById(cardId)
+                .orElseThrow(() -> new RuntimeException("Card not found"));
+        int auto = ratingCalculator.computeAutoRating(card);
+        card.setOverallRating(auto);
+        cardRepository.save(card);
+        return auto;
+    }
+
+    public int recalcAllCards() {
+        List<TcgCard> all = cardRepository.findAll();
+        int cnt = 0;
+        for (TcgCard c : all) {
+            int r = ratingCalculator.computeAutoRating(c);
+            c.setOverallRating(r);
+            cnt++;
+        }
+        cardRepository.saveAll(all);
+        return cnt;
+    }
+
+    @Transactional
+    public void setPokedexNumber(String id, Integer num) {
+        var card = cardRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Card not found: " + id));
+        card.setPokedexNumber(num);
     }
 }

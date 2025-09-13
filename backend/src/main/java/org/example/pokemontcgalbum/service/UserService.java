@@ -1,9 +1,7 @@
 package org.example.pokemontcgalbum.service;
 
 import lombok.RequiredArgsConstructor;
-import org.example.pokemontcgalbum.model.TcgCard;
 import org.example.pokemontcgalbum.model.User;
-import org.example.pokemontcgalbum.model.UserCard;
 import org.example.pokemontcgalbum.model.UserRole;
 import org.example.pokemontcgalbum.repository.UserRepository;
 import org.springframework.security.core.userdetails.UserDetails;

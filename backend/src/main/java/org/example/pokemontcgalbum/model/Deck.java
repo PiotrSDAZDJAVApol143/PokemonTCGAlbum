@@ -31,8 +31,10 @@ public class Deck {
     private User user;
 
     @OneToMany(mappedBy = "deck")
+    @JsonIgnore
     private List<UserCardInstance> cards = new ArrayList<>();
 
     @OneToMany(mappedBy = "deck", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnore
     private List<DeckCard> deckCards;
 }

@@ -40,7 +40,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/user-cards/**").authenticated()
                         .requestMatchers("/api/user-decks/**").authenticated()
                         .requestMatchers("/api/user/**").hasAnyRole("USER", "DEV")
-                        .requestMatchers("/api/dev/**").authenticated()
+                        .requestMatchers("/api/dev/**").hasRole("DEV")
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);

@@ -5,8 +5,17 @@ export default function AlbumSetListView({ goBack, onSelectSet }) {
     const [sets, setSets] = useState([]);
 
     useEffect(() => {
-        axios.get("/api/cards/sets").then(res => setSets(res.data));
+        axios.get("/api/cards/sets").then(res => {
+            const s = [...res.data].sort((a,b) => {
+                if (!a.releaseDate && !b.releaseDate) return 0;
+                if (!a.releaseDate) return 1;
+                if (!b.releaseDate) return -1;
+                return b.releaseDate.localeCompare(a.releaseDate);
+            });
+            setSets(s);
+        });
     }, []);
+
 
     return (
         <div>

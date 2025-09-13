@@ -3,14 +3,15 @@ package org.example.pokemontcgalbum.service;
 import lombok.RequiredArgsConstructor;
 import org.example.pokemontcgalbum.dto.*;
 import org.example.pokemontcgalbum.mapper.CardSetMapper;
+import org.example.pokemontcgalbum.mapper.UserCardInstanceListToUserCardDtoMapper;
 import org.example.pokemontcgalbum.mapper.UserCardInstanceMapper;
-import org.example.pokemontcgalbum.mapper.UserCardMapper;
 import org.example.pokemontcgalbum.model.*;
 import org.example.pokemontcgalbum.repository.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -18,18 +19,17 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class UserCardService {
-    private final UserCardRepository userCardRepo;
     private final UserCardInstanceRepository userCardInstanceRepo;
     private final TcgCardRepository cardRepo;
-    private final UserCardMapper userCardMapper;
+    private final UserCardInstanceListToUserCardDtoMapper userCardDtoMapper;
     private final UserCardInstanceMapper userCardInstanceMapper;
-    private final UserRepository userRepo;
     private final DeckRepository deckRepo;
     @Autowired
     private CardSetMapper cardSetMapper;
 
 
 
+    // Szczegóły danej karty użytkownika
     public UserCardDetailsDto getCardDetailsForUser(String cardId, User user) {
         TcgCard card = cardRepo.findById(cardId)
                 .orElseThrow(() -> new RuntimeException("Card not found"));
@@ -41,115 +41,198 @@ public class UserCardService {
         dto.setImageUrlLarge(card.getImageUrlLarge());
         dto.setFlavorText(card.getFlavorText());
         dto.setFlavorTextPl(card.getFlavorTextPl());
-        dto.setQuantity(instances.size()); // <--- liczba posiadanych egzemplarzy
-
         dto.setInstances(instances.stream().map(userCardInstanceMapper::toDto).toList());
         dto.setQuantity(instances.size());
 
+        // Zbierz listę talii, w których występuje jakikolwiek egzemplarz tej karty
+        List<String> deckNames = instances.stream()
+                .filter(inst -> inst.getDeck() != null)
+                .map(inst -> inst.getDeck().getName())
+                .distinct()
+                .toList();
+        dto.setDeckNames(deckNames);
+
+        // KONKRETNE MAPOWANIE: Attack → AttackDto
+        dto.setAttacks(card.getAttacks() != null
+                ? card.getAttacks().stream().map(attack -> {
+            AttackDto a = new AttackDto();
+            a.setId(attack.getId());
+            a.setName(attack.getName());
+            a.setNamePl(attack.getNamePl());
+            a.setCost(attack.getCost());
+            a.setDamage(attack.getDamage());
+            a.setDescription(attack.getDescription());
+            a.setDescriptionPl(attack.getDescriptionPl());
+            a.setSpecial(attack.getSpecial());
+            Long defId = (attack.getDef() != null ? attack.getDef().getId() : null);
+            Integer defRating = (attack.getDef() != null ? attack.getDef().getRating() : null);
+            a.setDefId(defId);
+            a.setDefRating(defRating);
+            return a;
+        }).toList() : null);
+
+        // KONKRETNE MAPOWANIE: Ability → AbilityDto
+        dto.setAbilities(card.getAbilities() != null
+                ? card.getAbilities().stream().map(ability -> {
+            AbilityDto ab = new AbilityDto();
+            ab.setId(ability.getId());
+            ab.setDefId(ability.getDef() != null ? ability.getDef().getId() : null);
+            ab.setName(ability.getName());
+            ab.setNamePl(ability.getNamePl());
+            ab.setDescription(ability.getDescription());
+            ab.setDescriptionPl(ability.getDescriptionPl());
+            ab.setRating(ability.getDef() != null ? ability.getDef().getRating() : null);
+            return ab;
+        }).toList() : null);
+
         return dto;
     }
-    public PageUserCardsDto searchUserCards(User user, int page, int size, String name, String setId) {
-        // Pobierz wszystkie karty usera
-        List<UserCard> all = userCardRepo.findByUser(user);
-        List<UserCard> filtered = all;
 
-        // 1. Najpierw filtruj po setId jeśli podany
-        if (setId != null && !setId.isBlank()) {
-            filtered = filtered.stream()
-                    .filter(uc -> uc.getCard().getSet() != null && setId.equals(uc.getCard().getSet().getId()))
-                    .collect(Collectors.toList());
+    private long newestInstanceId(List<UserCardInstance> list) {
+        return list.stream()
+                .mapToLong(inst -> inst.getId() != null ? inst.getId() : 0L)
+                .max()
+                .orElse(0L);
+    }
+    // Przeszukiwanie kolekcji użytkownika (paging + filtr)
+    public PageUserCardsDto searchUserCards(User user, int page, int size, String name, String setId, String sort) {
+        List<UserCardInstance> all = userCardInstanceRepo.findAllByUser(user);
+
+        // Filtrowanie po setId, po nazwie
+        List<UserCardInstance> filtered = all.stream()
+                .filter(inst -> setId == null || setId.isBlank() || (inst.getCard().getSet() != null && setId.equals(inst.getCard().getSet().getId())))
+                .filter(inst -> name == null || name.isBlank() || inst.getCard().getName().toLowerCase().contains(name.toLowerCase()))
+                .toList();
+
+        // Grupowanie po karcie
+        Map<TcgCard, List<UserCardInstance>> grouped = filtered.stream()
+                .collect(Collectors.groupingBy(UserCardInstance::getCard));
+        // Tworzenie paginacji po unikalnych kartach (nie po instancjach!)
+        List<Map.Entry<TcgCard, List<UserCardInstance>>> entries = new ArrayList<>(grouped.entrySet());
+
+        Comparator<Map.Entry<TcgCard, List<UserCardInstance>>> byRecent =
+                Comparator.comparingLong((Map.Entry<TcgCard, List<UserCardInstance>> e) ->
+                        newestInstanceId(e.getValue())
+                ).reversed();
+
+        Comparator<Map.Entry<TcgCard, List<UserCardInstance>>> byOldest = byRecent.reversed();
+
+        Comparator<Map.Entry<TcgCard, List<UserCardInstance>>> byNameAZ =
+                Comparator.comparing((Map.Entry<TcgCard, List<UserCardInstance>> e) ->
+                        e.getKey().getName(), String.CASE_INSENSITIVE_ORDER);
+
+        Comparator<Map.Entry<TcgCard, List<UserCardInstance>>> byNameZA = byNameAZ.reversed();
+
+        Comparator<Map.Entry<TcgCard, List<UserCardInstance>>> byPokedex =
+                Comparator
+                        .comparingInt((Map.Entry<TcgCard, List<UserCardInstance>> e) ->
+                                e.getKey().getPokedexNumber() != null ? e.getKey().getPokedexNumber() : Integer.MAX_VALUE)
+                        // przy tym samym pokedex: nowszy set pierwszy
+                        .thenComparing((Map.Entry<TcgCard, List<UserCardInstance>> e) ->
+                                        e.getKey().getSet() != null && e.getKey().getSet().getReleaseDate() != null
+                                                ? e.getKey().getSet().getReleaseDate()
+                                                : java.time.LocalDate.MIN,
+                                Comparator.reverseOrder())
+                        .thenComparing(e -> e.getKey().getName(), String.CASE_INSENSITIVE_ORDER);
+
+        Comparator<Map.Entry<TcgCard, List<UserCardInstance>>> byPowerDesc =
+                Comparator
+                        // null → najmniej
+                        .comparingInt((Map.Entry<TcgCard, List<UserCardInstance>> e) ->
+                                e.getKey().getOverallRating() != null ? e.getKey().getOverallRating() : Integer.MIN_VALUE)
+                        .reversed()
+                        // sensowne tie-breakery:
+                        .thenComparing((Map.Entry<TcgCard, List<UserCardInstance>> e) ->
+                                        e.getKey().getSet() != null && e.getKey().getSet().getReleaseDate() != null
+                                                ? e.getKey().getSet().getReleaseDate()
+                                                : java.time.LocalDate.MIN,
+                                Comparator.reverseOrder())
+                        .thenComparing(e -> e.getKey().getName(), String.CASE_INSENSITIVE_ORDER);
+
+        switch ((sort == null ? "recent" : sort).toLowerCase()) {
+            case "oldest"  -> entries.sort(byOldest);
+            case "name_az" -> entries.sort(byNameAZ);
+            case "name_za" -> entries.sort(byNameZA);
+            case "pokedex" -> entries.sort(byPokedex);
+            case "overallrating" -> entries.sort(byPowerDesc);
+            default        -> entries.sort(byRecent); // recent
         }
+        // ------- /KOMPARATORY -------
 
-        // 2. Potem filtruj po nazwie lub numerze jeśli podane
-        if (name != null && name.matches("\\d{1,3}/\\d{1,3}")) {
-            String[] parts = name.split("/");
-            String searchNum = normalizeNumber(parts[0]);
-            String searchTotal = normalizeNumber(parts[1]);
-            filtered = filtered.stream()
-                    .filter(uc ->
-                            searchNum.equals(normalizeNumber(uc.getCard().getNumberInSet())) &&
-                                    uc.getCard().getSet() != null &&
-                                    searchTotal.equals(normalizeNumber(String.valueOf(uc.getCard().getSet().getPrintedTotal())))
-                    )
-                    .collect(Collectors.toList());
-        } else if (name != null && !name.isBlank()) {
-            filtered = filtered.stream()
-                    .filter(uc -> uc.getCard().getName().toLowerCase().contains(name.toLowerCase()))
-                    .collect(Collectors.toList());
-        }
-        // 3. Jeśli nic nie podano, zostają karty z wybranego setu (lub wszystkie jeśli setId puste)
+        int totalUnique = entries.size();
+        int totalInstances = filtered.size();
+        int duplicates = totalInstances - totalUnique;
 
-        // 4. Paginacja
         int start = page * size;
-        int end = Math.min(start + size, filtered.size());
-        List<UserCardDto> pageContent = filtered.subList(Math.min(start, filtered.size()), end)
-                .stream().map(userCardMapper::toDto).collect(Collectors.toList());
+        int end = Math.min(start + size, totalUnique);
 
-        // 5. Statystyki
-        int unique = filtered.size();
-        int total = filtered.stream().mapToInt(UserCard::getQuantity).sum();
-        int duplicates = filtered.stream()
-                .mapToInt(uc -> Math.max(uc.getQuantity() - 1, 0))
-                .sum();
+        List<UserCardDto> content = entries
+                .subList(Math.min(start, totalUnique), end).stream()
+                .map(e -> userCardDtoMapper.toDto(e.getKey(), e.getValue()))
+                .toList();
 
-        // 6. Zwróć DTO
         PageUserCardsDto dto = new PageUserCardsDto();
-        dto.setContent(pageContent);
-        dto.setTotalPages((int) Math.ceil((double) filtered.size() / size));
-        dto.setTotalElements(filtered.size());
-        dto.setUnique(unique);
-        dto.setTotal(total);
+        dto.setContent(content);
+        dto.setTotalPages((int) Math.ceil((double) totalUnique / size));
+        dto.setTotalElements(totalUnique);
+        dto.setUnique(totalUnique);
+        dto.setTotal(totalInstances);
         dto.setDuplicates(duplicates);
-
         return dto;
     }
+    // Kolekcja zestawów użytkownika
     public List<CardSetDto> findSetsForUser(User user) {
-        List<CardSet> sets = userCardRepo.findDistinctSetsByUser(user);
-        return sets.stream().map(cardSetMapper::toDto).toList();
+        List<UserCardInstance> all = userCardInstanceRepo.findAllByUser(user);
+        return all.stream()
+                .map(inst -> inst.getCard().getSet())
+                .filter(set -> set != null)
+                .distinct()
+                .map(cardSetMapper::toDto)
+                .toList();
     }
+    // Progres użytkownika w setach (unikalne karty per set)
     public List<UserSetProgressDto> findSetsForUserWithProgress(User user) {
-        // Wszystkie UserCardy usera
-        List<UserCard> userCards = userCardRepo.findByUser(user);
+        List<UserCardInstance> all = userCardInstanceRepo.findAllByUser(user);
 
-        // Grupuj po CardSet.id
-        Map<String, List<UserCard>> bySet = userCards.stream()
-                .filter(uc -> uc.getCard().getSet() != null)
-                .collect(Collectors.groupingBy(uc -> uc.getCard().getSet().getId()));
+        // Grupuj po secie
+        Map<CardSet, List<UserCardInstance>> bySet = all.stream()
+                .filter(inst -> inst.getCard().getSet() != null)
+                .collect(Collectors.groupingBy(inst -> inst.getCard().getSet()));
 
-        // Stwórz DTO dla każdego setu
         List<UserSetProgressDto> list = new ArrayList<>();
-        for (Map.Entry<String, List<UserCard>> entry : bySet.entrySet()) {
-            CardSet set = entry.getValue().get(0).getCard().getSet(); // każdy UserCard w tej liście ma ten sam set
+        for (Map.Entry<CardSet, List<UserCardInstance>> entry : bySet.entrySet()) {
+            CardSet set = entry.getKey();
+            // Ile różnych kart w tym secie?
+            long unlocked = entry.getValue().stream().map(inst -> inst.getCard().getId()).distinct().count();
+
             UserSetProgressDto dto = new UserSetProgressDto();
             dto.setId(set.getId());
             dto.setName(set.getName());
             dto.setSeries(set.getSeries());
             dto.setLogoUrl(set.getLogoUrl());
-            dto.setUnlocked(entry.getValue().size()); // unikalne UserCardy = ile różnych kart usera w secie
-            dto.setTotal(set.getTotal() != null ? set.getTotal() : 0); // tu użyj właściwego pola z CardSet, NIE printedTotal!
+            dto.setUnlocked((int) unlocked);
+            dto.setTotal(set.getTotal() != null ? set.getTotal() : 0);
+            dto.setReleaseDate(set.getReleaseDate() != null ? set.getReleaseDate().toString() : null);
             list.add(dto);
         }
+        list.sort((a,b) -> {
+            if (a.getReleaseDate() == null && b.getReleaseDate() == null) return 0;
+            if (a.getReleaseDate() == null) return 1;
+            if (b.getReleaseDate() == null) return -1;
+            return b.getReleaseDate().compareTo(a.getReleaseDate());
+        });
         return list;
     }
 
-    public void addCardToUser(User user, String cardId, int quantity) {
+    // Dodanie n egzemplarzy danej karty
+    public void addCardInstances(User user, String cardId, int quantity) {
         TcgCard card = cardRepo.findById(cardId).orElseThrow();
-        UserCard uc = userCardRepo.findByUserAndCard(user, card).orElse(null);
-        if (uc == null && quantity > 0) {
-            uc = new UserCard();
-            uc.setUser(user);
-            uc.setCard(card);
-            uc.setQuantity(quantity);
-            userCardRepo.save(uc);
-        } else if (uc != null) {
-            int newQty = uc.getQuantity() + quantity;
-            if (newQty > 0) {
-                uc.setQuantity(newQty);
-                userCardRepo.save(uc);
-            } else {
-                // Usuń kartę z kolekcji użytkownika, bo już nie ma żadnej
-                userCardRepo.delete(uc);
-            }
+        for (int i = 0; i < quantity; i++) {
+            UserCardInstance inst = new UserCardInstance();
+            inst.setUser(user);
+            inst.setCard(card);
+            inst.setDeck(null);
+            userCardInstanceRepo.save(inst);
         }
     }
     private String normalizeNumber(String number) {
@@ -161,15 +244,7 @@ public class UserCardService {
         }
     }
 
-    public void addCardInstance(User user, String cardId) {
-        TcgCard card = cardRepo.findById(cardId).orElseThrow(() -> new RuntimeException("Card not found"));
-        UserCardInstance inst = new UserCardInstance();
-        inst.setUser(user);
-        inst.setCard(card);
-        inst.setDeck(null); // nieprzypisana
-        userCardInstanceRepo.save(inst);
-    }
-
+    // Usunięcie konkretnej instancji
     public void removeCardInstance(User user, Long instanceId) {
         UserCardInstance inst = userCardInstanceRepo.findById(instanceId)
                 .orElseThrow(() -> new RuntimeException("Instance not found"));
@@ -178,6 +253,16 @@ public class UserCardService {
         userCardInstanceRepo.delete(inst);
     }
 
+    // Usuwanie X instancji (np. 3x Pikachu)
+    public void removeCardInstances(User user, String cardId, int quantity) {
+        TcgCard card = cardRepo.findById(cardId).orElseThrow();
+        List<UserCardInstance> insts = userCardInstanceRepo.findAllByUserAndCard(user, card);
+        for (int i = 0; i < quantity && i < insts.size(); i++) {
+            userCardInstanceRepo.delete(insts.get(i));
+        }
+    }
+
+    // Przypisanie instancji do decka
     public void assignInstanceToDeck(User user, Long instanceId, Long deckId) {
         UserCardInstance inst = userCardInstanceRepo.findById(instanceId)
                 .orElseThrow(() -> new RuntimeException("Instance not found"));
@@ -198,6 +283,7 @@ public class UserCardService {
         userCardInstanceRepo.save(inst);
     }
 
-
-
 }
+
+
+

@@ -31,9 +31,6 @@ public class User {
     private UserRole role;
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL)
-    private List<UserCard> collection;
-
-    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL)
     @JsonManagedReference
     private List<Deck> decks = new ArrayList<>();
 

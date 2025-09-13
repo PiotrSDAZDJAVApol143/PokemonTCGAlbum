@@ -45,7 +45,7 @@ public class PokemonExportService {
                     attackMap.put("namePl", attack.getNamePl());
                     attackMap.put("description", attack.getDescription());
                     attackMap.put("descriptionPl", attack.getDescriptionPl());
-                    attackMap.put("rating", attack.getRating());
+                    attackMap.put("rating", attack.getDef() != null ? attack.getDef().getRating() : null);
                     attacks.add(attackMap);
                 }
                 cardMap.put("attacks", attacks);
@@ -60,7 +60,7 @@ public class PokemonExportService {
                     abilityMap.put("namePl", ability.getNamePl());
                     abilityMap.put("description", ability.getDescription());
                     abilityMap.put("descriptionPl", ability.getDescriptionPl());
-                    abilityMap.put("rating", ability.getRating());
+                    abilityMap.put("rating", ability.getDef() != null ? ability.getDef().getRating() : null);
                     abilities.add(abilityMap);
                 }
                 cardMap.put("abilities", abilities);
@@ -73,7 +73,7 @@ public class PokemonExportService {
                     ruleMap.put("id", rule.getId());
                     ruleMap.put("text", rule.getText());
                     ruleMap.put("textPl", rule.getTextPl());
-                    ruleMap.put("rating", rule.getRating());
+                    ruleMap.put("rating", rule.getDef() != null ? rule.getDef().getRating() : null);
                     rules.add(ruleMap);
                 }
                 cardMap.put("rules", rules);
