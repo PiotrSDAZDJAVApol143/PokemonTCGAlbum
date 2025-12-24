@@ -95,7 +95,7 @@ public class UserCardService {
                 .orElse(0L);
     }
     // Przeszukiwanie kolekcji użytkownika (paging + filtr)
-    public PageUserCardsDto searchUserCards(User user, int page, int size, String name, String setId, String sort) {
+    public PageUserCardsDto searchUserCards(User user, int page, int size, String name, String setId, String sort, String show) {
         List<UserCardInstance> all = userCardInstanceRepo.findAllByUser(user);
 
         // Filtrowanie po setId, po nazwie
@@ -107,6 +107,22 @@ public class UserCardService {
         // Grupowanie po karcie
         Map<TcgCard, List<UserCardInstance>> grouped = filtered.stream()
                 .collect(Collectors.groupingBy(UserCardInstance::getCard));
+
+        // filtr WYŚWIETL
+        String showNorm = (show == null ? "all" : show).toLowerCase();
+        if (!"all".equals(showNorm)) {
+            grouped.entrySet().removeIf(entry -> {
+                List<UserCardInstance> list = entry.getValue();
+                boolean anyAssigned = list.stream().anyMatch(i -> i.getDeck() != null);
+                boolean anyFree     = list.stream().anyMatch(i -> i.getDeck() == null);
+
+                return switch (showNorm) {
+                    case "assigned"    -> !anyAssigned;   // usuń jeśli żadna nie jest przydzielona
+                    case "unassigned"  -> !anyFree;       // usuń jeśli nie ma wolnej
+                    default -> false;
+                };
+            });
+        }
         // Tworzenie paginacji po unikalnych kartach (nie po instancjach!)
         List<Map.Entry<TcgCard, List<UserCardInstance>>> entries = new ArrayList<>(grouped.entrySet());
 
@@ -281,6 +297,29 @@ public class UserCardService {
             throw new RuntimeException("Nie jesteś właścicielem tej karty!");
         inst.setDeck(null);
         userCardInstanceRepo.save(inst);
+    }
+
+    public List<UserCardDto> findUserCardsByPokedex(User user, int dex) {
+        // wszystkie instancje usera
+        List<UserCardInstance> all = userCardInstanceRepo.findAllByUser(user);
+
+        // tylko te z żądanym numerem pokedex
+        List<UserCardInstance> filtered = all.stream()
+                .filter(uci -> uci.getCard() != null
+                        && uci.getCard().getPokedexNumber() != null
+                        && uci.getCard().getPokedexNumber() == dex)
+                .toList();
+
+        // grupuj po karcie (unikalne karty)
+        Map<TcgCard, List<UserCardInstance>> grouped = filtered.stream()
+                .collect(Collectors.groupingBy(UserCardInstance::getCard));
+
+        // zamapuj na UserCardDto (masz już mapper łączący listę instancji)
+        return grouped.entrySet().stream()
+                // opcjonalnie posortuj: nowsze instancje/alfabetycznie/etc.
+                .sorted(Comparator.comparing(e -> e.getKey().getName(), String.CASE_INSENSITIVE_ORDER))
+                .map(e -> userCardDtoMapper.toDto(e.getKey(), e.getValue()))
+                .toList();
     }
 
 }

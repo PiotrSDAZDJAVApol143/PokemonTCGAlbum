@@ -26,9 +26,11 @@ public class UserCardController {
             @RequestParam int size,
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String setId,
-            @RequestParam(required = false, defaultValue = "recent") String sort) {
+            @RequestParam(required = false, defaultValue = "recent") String sort,
+            @RequestParam(required = false, defaultValue = "all") String show
+    ) {
         User user = getAuthenticatedUser();
-        return userCardService.searchUserCards(user, page, size, name, setId, sort);
+        return userCardService.searchUserCards(user, page, size, name, setId, sort, show);
     }
 
     @GetMapping("/details/{cardId}")
