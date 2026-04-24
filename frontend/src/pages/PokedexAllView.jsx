@@ -18,6 +18,7 @@ export default function PokedexAllView({ goBack }) {
             <button className="mb-4 px-6 py-2 rounded bg-gray-200" onClick={goBack}>
                 ← Powrót
             </button>
+            <div className="glass-panel p-10">
             <div className="flex gap-8 p-8">
                 <div className="flex-1">
                     <div className="text-7xl font-extrabold mb-6">Pokedex</div>
@@ -57,6 +58,7 @@ export default function PokedexAllView({ goBack }) {
                     )}
                 </div>
             </div>
+        </div>
         </div>
     );
 }

@@ -1,0 +1,202 @@
+package org.example.pokemontcgalbum.controller;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.example.pokemontcgalbum.dto.ChangePasswordRequest;
+import org.example.pokemontcgalbum.dto.UpdateProfileRequest;
+import org.example.pokemontcgalbum.model.User;
+import org.example.pokemontcgalbum.model.UserRole;
+import org.example.pokemontcgalbum.security.JwtAuthenticationFilter;
+import org.example.pokemontcgalbum.security.JwtUtil;
+import org.example.pokemontcgalbum.service.UserService;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
+import org.springframework.boot.autoconfigure.data.jpa.JpaRepositoriesAutoConfiguration;
+import org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.http.MediaType;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.web.servlet.MockMvc;
+
+import java.util.Optional;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+
+@WebMvcTest(AccountController.class)
+@AutoConfigureMockMvc(addFilters = false)
+class AccountControllerTest {
+
+    @Autowired MockMvc mockMvc;
+    @Autowired ObjectMapper objectMapper;
+
+    @MockBean UserService userService;
+    @MockBean JwtUtil jwtUtil;
+    @MockBean PasswordEncoder passwordEncoder;
+    @MockBean
+    JwtAuthenticationFilter jwtAuthenticationFilter;
+
+    @Test
+    @WithMockUser(username = "piotr", roles = {"USER"})
+    void me_shouldReturnDto() throws Exception {
+        User u = new User();
+        u.setId(7L);
+        u.setUsername("piotr");
+        u.setRole(UserRole.USER);
+
+        when(userService.findByUsername("piotr")).thenReturn(Optional.of(u));
+
+        mockMvc.perform(get("/api/user/me"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(7))
+                .andExpect(jsonPath("$.username").value("piotr"))
+                .andExpect(jsonPath("$.role").value("USER"));
+    }
+
+    @Test
+    @WithMockUser(username = "piotr", roles = {"USER"})
+    void updateProfile_shouldRejectTooShortUsername() throws Exception {
+        User u = new User();
+        u.setId(7L);
+        u.setUsername("piotr");
+        u.setRole(UserRole.USER);
+
+        when(userService.findByUsername("piotr")).thenReturn(Optional.of(u));
+
+        UpdateProfileRequest req = new UpdateProfileRequest();
+        req.setUsername("ab"); // < 3
+
+        mockMvc.perform(patch("/api/user/me")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @WithMockUser(username = "piotr", roles = {"USER"})
+    void updateProfile_shouldUpdateUsername_andReturnDto() throws Exception {
+        User u = new User();
+        u.setId(7L);
+        u.setUsername("piotr");
+        u.setRole(UserRole.USER);
+
+        when(userService.findByUsername("piotr")).thenReturn(Optional.of(u));
+        when(userService.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        UpdateProfileRequest req = new UpdateProfileRequest();
+        req.setUsername("  NowaNazwa  ");
+
+        mockMvc.perform(patch("/api/user/me")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(7))
+                .andExpect(jsonPath("$.username").value("NowaNazwa"))
+                .andExpect(jsonPath("$.role").value("USER"));
+
+        verify(userService).assertUsernameAvailable("NowaNazwa", 7L);
+
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(userService).save(captor.capture());
+        assertEquals("NowaNazwa", captor.getValue().getUsername());
+    }
+
+    @Test
+    @WithMockUser(username = "piotr", roles = {"USER"})
+    void changePassword_shouldRejectMissingFields() throws Exception {
+        User u = new User();
+        u.setId(7L);
+        u.setUsername("piotr");
+        u.setPassword("hash");
+        u.setRole(UserRole.USER);
+
+        when(userService.findByUsername("piotr")).thenReturn(Optional.of(u));
+
+        ChangePasswordRequest req = new ChangePasswordRequest();
+        req.setCurrentPassword(null);
+        req.setNewPassword("123456");
+
+        mockMvc.perform(post("/api/user/change-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @WithMockUser(username = "piotr", roles = {"USER"})
+    void changePassword_shouldRejectWrongCurrentPassword() throws Exception {
+        User u = new User();
+        u.setId(7L);
+        u.setUsername("piotr");
+        u.setPassword("hash");
+        u.setRole(UserRole.USER);
+
+        when(userService.findByUsername("piotr")).thenReturn(Optional.of(u));
+        when(passwordEncoder.matches("bad", "hash")).thenReturn(false);
+
+        ChangePasswordRequest req = new ChangePasswordRequest();
+        req.setCurrentPassword("bad");
+        req.setNewPassword("123456");
+
+        mockMvc.perform(post("/api/user/change-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @WithMockUser(username = "piotr", roles = {"USER"})
+    void changePassword_shouldRejectTooShortNewPassword() throws Exception {
+        User u = new User();
+        u.setId(7L);
+        u.setUsername("piotr");
+        u.setPassword("hash");
+        u.setRole(UserRole.USER);
+
+        when(userService.findByUsername("piotr")).thenReturn(Optional.of(u));
+        when(passwordEncoder.matches("ok", "hash")).thenReturn(true);
+
+        ChangePasswordRequest req = new ChangePasswordRequest();
+        req.setCurrentPassword("ok");
+        req.setNewPassword("123"); // < 6
+
+        mockMvc.perform(post("/api/user/change-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @WithMockUser(username = "piotr", roles = {"USER"})
+    void changePassword_shouldUpdatePassword_whenValid() throws Exception {
+        User u = new User();
+        u.setId(7L);
+        u.setUsername("piotr");
+        u.setPassword("hash");
+        u.setRole(UserRole.USER);
+
+        when(userService.findByUsername("piotr")).thenReturn(Optional.of(u));
+        when(passwordEncoder.matches("ok", "hash")).thenReturn(true);
+        when(passwordEncoder.encode("123456")).thenReturn("ENC");
+        when(userService.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ChangePasswordRequest req = new ChangePasswordRequest();
+        req.setCurrentPassword("ok");
+        req.setNewPassword("123456");
+
+        mockMvc.perform(post("/api/user/change-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isOk());
+
+        verify(userService).save(any(User.class));
+        assertEquals("ENC", u.getPassword());
+    }
+}

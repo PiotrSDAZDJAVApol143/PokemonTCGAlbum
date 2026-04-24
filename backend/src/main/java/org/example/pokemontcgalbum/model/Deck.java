@@ -25,6 +25,14 @@ public class Deck {
 
     private String logoUrl;
 
+    @Column(nullable = false)
+    @Builder.Default
+    private int wins = 0;
+
+    @Column(nullable = false)
+    @Builder.Default
+    private int losses = 0;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
     @JsonBackReference

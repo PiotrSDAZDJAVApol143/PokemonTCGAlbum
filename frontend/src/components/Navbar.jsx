@@ -1,150 +1,300 @@
 // Navbar.jsx
-import { Link, NavLink, useNavigate } from "react-router-dom";
-import { useState } from "react";
-import { FaSignOutAlt, FaBars } from "react-icons/fa";
+import { Link, NavLink, useNavigate, useLocation } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { FaSignOutAlt, FaBars, FaSun, FaMoon } from "react-icons/fa";
 import Logo from "../assets/Logo01.png";
 import { useAuth } from "../context/AuthContext";
 
-/** Kwadratowy przycisk z zaokrągleniem, gradientem i stanem aktywnym */
-function NavSquare({ to, children, disabled }) {
+function NavSquare({
+                       to,
+                       children,
+                       disabled,
+                       onClick,
+                       isActiveOverride,
+                       end = false,
+                       compact = false,
+                   }) {
     const base =
-        "relative inline-flex items-center justify-center " +
-        "h-14 w-36 rounded-2xl font-semibold select-none " +
-        // gradient: granat → fiolet → srebrny (metallic vibe)
+        "relative inline-flex items-center justify-center w-full " +
+        `${compact ? "h-12 rounded-xl text-sm" : "h-14 rounded-2xl text-base"} ` +
+        "font-semibold select-none whitespace-nowrap px-2 " +
         "bg-gradient-to-br from-indigo-700 via-violet-600 to-slate-300 " +
         "text-white shadow-[0_6px_0_#1b1b3a] border border-black transition-all";
+
     const hover =
-        "hover:scale-105 hover:shadow-[0_10px_0_#1b1b3a] focus:outline-none focus:ring-2 focus:ring-violet-300";
+        "hover:scale-[1.02] hover:shadow-[0_8px_0_#1b1b3a] focus:outline-none focus:ring-2 focus:ring-violet-300";
+
     const disabledCls = "opacity-50 pointer-events-none";
+    const activeCls = "text-yellow-100 ring-2 ring-slate-300 shadow-[0_8px_0_#1b1b3a]";
 
     const content = (
-        <span className="relative z-10 drop-shadow-[0_1px_0_rgba(0,0,0,0.4)]">
-      {children}
-    </span>
+        <span
+            className="relative z-10 drop-shadow-[0_1px_0_rgba(0,0,0,0.4)] text-center leading-tight"
+            style={{ fontSize: compact ? "clamp(11px, 0.85vw, 14px)" : "clamp(12px, 0.9vw, 18px)" }}
+        >
+            {children}
+        </span>
     );
 
-    if (disabled) return <div className={`${base} ${disabledCls}`}>{content}</div>;
+    if (disabled) {
+        return <div className={`${base} ${disabledCls}`}>{content}</div>;
+    }
+
+    if (onClick) {
+        return (
+            <button
+                type="button"
+                onClick={onClick}
+                className={[base, hover, isActiveOverride ? activeCls : ""].join(" ")}
+            >
+                <span className="absolute inset-0 rounded-inherit bg-[radial-gradient(200px_80px_at_50%_-10px,rgba(255,255,255,0.45),transparent_70%)] opacity-60" />
+                {content}
+            </button>
+        );
+    }
 
     return (
         <NavLink
             to={to}
+            end={end}
             className={({ isActive }) =>
-                [
-                    base,
-                    hover,
-                    // aktywny = lekko większy + inny kolor tekstu + subtelny ring
-                    isActive ? "scale-110 text-yellow-100 ring-2 ring-slate-300" : "",
-                ].join(" ")
+                [base, hover, isActive || isActiveOverride ? activeCls : ""].join(" ")
             }
         >
-            {/* metallic shine */}
-            <span className="absolute inset-0 rounded-2xl bg-[radial-gradient(200px_80px_at_50%_-10px,rgba(255,255,255,0.45),transparent_70%)] opacity-60" />
+            <span className="absolute inset-0 rounded-inherit bg-[radial-gradient(200px_80px_at_50%_-10px,rgba(255,255,255,0.45),transparent_70%)] opacity-60" />
             {content}
         </NavLink>
     );
 }
-function NavSlot({ children }) {
-    return (
-        <div className="h-14 w-36 grid place-items-center overflow-visible">
-            {children}
-        </div>
-    );
-}
 
-/** Tytuł w „pokemonowym” stylu (złoty + ciemna obwódka) */
 function PokeTitle() {
-    const line = "leading-tight";
     const stroke = {
         textShadow:
             "0 2px 0 #1b1b3a, 0 -2px 0 #1b1b3a, 2px 0 0 #1b1b3a, -2px 0 0 #1b1b3a," +
             " 2px 2px 0 #1b1b3a, -2px 2px 0 #1b1b3a, 2px -2px 0 #1b1b3a, -2px -2px 0 #1b1b3a",
     };
+
     return (
-        <div className="hidden md:block mr-4">
-            <div
-                className={`text-yellow-300 font-extrabold text-xl ${line}`}
-                style={stroke}
-            >
-                Pokemon TCG
-            </div>
-            <div
-                className={`text-yellow-300 font-extrabold text-xl ${line}`}
-                style={stroke}
-            >
-                Album APP
+        <div className="flex h-full w-full items-center justify-center">
+            <div className="text-center leading-[1.02]" style={stroke}>
+                <div className="text-yellow-300 font-extrabold" style={{ fontSize: "clamp(16px, 1.35vw, 28px)" }}>
+                    Pokemon TCG
+                </div>
+                <div className="text-yellow-300 font-extrabold" style={{ fontSize: "clamp(16px, 1.35vw, 28px)" }}>
+                    Album APP
+                </div>
             </div>
         </div>
     );
 }
 
-export default function Navbar() {
+function ThemeToggle({ themeMode, setThemeMode }) {
+    const trackRef = useRef(null);
+    const [dragging, setDragging] = useState(false);
+    const [systemDark, setSystemDark] = useState(() => {
+        if (typeof window === "undefined") return false;
+        return window.matchMedia("(prefers-color-scheme: dark)").matches;
+    });
+
+    useEffect(() => {
+        if (typeof window === "undefined") return undefined;
+
+        const media = window.matchMedia("(prefers-color-scheme: dark)");
+        const onChange = (e) => setSystemDark(e.matches);
+
+        media.addEventListener?.("change", onChange);
+        return () => media.removeEventListener?.("change", onChange);
+    }, []);
+
+    const isDark = themeMode === "dark" || (themeMode === "system" && systemDark);
+
+    const setFromClientX = (clientX) => {
+        const el = trackRef.current;
+        if (!el) return;
+        const rect = el.getBoundingClientRect();
+        const middle = rect.left + rect.width / 2;
+        setThemeMode(clientX >= middle ? "dark" : "light");
+    };
+
+    const onPointerDown = (e) => {
+        e.preventDefault();
+        setDragging(true);
+        trackRef.current?.setPointerCapture?.(e.pointerId);
+        setFromClientX(e.clientX);
+    };
+
+    const onPointerMove = (e) => {
+        if (!dragging) return;
+        e.preventDefault();
+        setFromClientX(e.clientX);
+    };
+
+    const stopDrag = (e) => {
+        if (!dragging) return;
+        e.preventDefault();
+        setDragging(false);
+        trackRef.current?.releasePointerCapture?.(e.pointerId);
+    };
+
+    return (
+        <div className="flex h-full w-full items-center justify-center">
+            <div
+                ref={trackRef}
+                role="switch"
+                aria-checked={isDark}
+                aria-label="Przełącz motyw jasny lub ciemny"
+                tabIndex={0}
+                onPointerDown={onPointerDown}
+                onPointerMove={onPointerMove}
+                onPointerUp={stopDrag}
+                onPointerCancel={stopDrag}
+                onClick={() => setThemeMode(isDark ? "light" : "dark")}
+                className={[
+                    "relative h-10 w-[88px] rounded-full border border-black/20 shadow-md cursor-pointer select-none overflow-hidden transition-colors duration-300",
+                    isDark
+                        ? "bg-gradient-to-r from-slate-800 via-sky-900 to-indigo-950"
+                        : "bg-gradient-to-r from-cyan-300 via-sky-200 to-lime-200",
+                ].join(" ")}
+            >
+                <div className="absolute inset-y-0 left-0 w-1/2 flex items-center justify-center pointer-events-none">
+                    {isDark ? <FaMoon className="text-white/90 text-xs" /> : null}
+                </div>
+
+                <div className="absolute inset-y-0 right-0 w-1/2 flex items-center justify-center pointer-events-none">
+                    {!isDark ? <FaSun className="text-amber-500 text-sm" /> : null}
+                </div>
+
+                <div
+                    className={[
+                        "absolute top-[3px] h-8 w-8 rounded-full border shadow transition-all duration-300",
+                        isDark
+                            ? "left-[53px] bg-slate-900 border-slate-700"
+                            : "left-[3px] bg-cyan-400 border-cyan-300",
+                    ].join(" ")}
+                />
+            </div>
+        </div>
+    );
+}
+
+export default function Navbar({ themeMode, setThemeMode }) {
     const { user, logout } = useAuth();
     const [open, setOpen] = useState(false);
     const navigate = useNavigate();
+    const location = useLocation();
+
+    const goAlbum = () => {
+        navigate("/album", { state: { resetAlbum: Date.now() } });
+        setOpen(false);
+    };
+
+    const goTo = (path) => {
+        navigate(path);
+        setOpen(false);
+    };
+
+    const handleLogout = () => {
+        logout();
+        setOpen(false);
+        navigate("/home");
+    };
 
     return (
-        <header className="sticky top-0 z-50 w-full bg-gradient-to-b from-white to-slate-50/70 backdrop-blur border-b border-black/10">
-            {/* Desktop: 5 stref – tytuł | lewa 3 | logo | prawa 3 | wyloguj */}
-            <div className="mx-auto max-w-7xl px-4">
-                <div className="hidden md:grid grid-cols-[auto,1fr,auto,1fr,auto] items-center h-23">
-                    {/* 1) Tytuł */}
-                    <PokeTitle/>
-
-                    {/* 2) Lewy blok 3 przyciski */}
-                    <nav className="flex items-center justify-end gap-4 pr-4">
-                        <NavSlot><NavSquare to="/">Home</NavSquare></NavSlot>
-                        <NavSlot><NavSquare to="/pokedex">Pokedex</NavSquare></NavSlot>
-                        <NavSlot><NavSquare to="/album" disabled={!user}>Album</NavSquare></NavSlot>
-                    </nav>
-
-                    {/* 3) Logo w centrum (klik jak Home) */}
-                    <div className="flex items-center justify-center h-full">
-                        <Link to="/" className="h-full grid place-items-center">
-                            <img
-                                src={Logo}
-                                alt="Logo"
-                                className="h-[95%] w-auto object-contain select-none"
-                            />
-                        </Link>
+        <header className="sticky top-0 z-50 w-full border-b border-black/10 app-glass-strong">
+            <div className="mx-auto w-full">
+                {/* DESKTOP */}
+                <div className="relative hidden md:grid h-[100px] items-center"
+                     style={{
+                         gridTemplateColumns:
+                             "5% 10% 10% 10% 10% 5% 5% 10% 10% 10% 5% 5% 5%",
+                     }}
+                >
+                    {/* 1 */}<div />
+                    {/* 2 */}<div className="h-full"><PokeTitle /></div>
+                    {/* 3 */}
+                    <div className="flex items-center justify-center px-1">
+                        <NavSquare to="/" end>Home</NavSquare>
+                    </div>
+                    {/* 4 */}
+                    <div className="flex items-center justify-center px-1">
+                        <NavSquare to="/pokedex">Pokedex</NavSquare>
+                    </div>
+                    {/* 5 */}
+                    <div className="flex items-center justify-center px-1">
+                        <NavSquare
+                            isActiveOverride={location.pathname.startsWith("/album")}
+                            onClick={goAlbum}
+                        >
+                            Album
+                        </NavSquare>
                     </div>
 
-                    {/* 4) Prawy blok 3 przyciski */}
-                    <div className="flex items-center justify-start gap-4 pl-4">
-                        <NavSlot><NavSquare to="/deck" disabled={!user}>Deck</NavSquare></NavSlot>
-                        <NavSlot><NavSquare to="/poke-game" disabled={!user}>Poke&nbsp;Game</NavSquare></NavSlot>
-                        {!user
-                            ? <NavSlot><NavSquare to="/login">Login</NavSquare></NavSlot>
-                            : <NavSlot><NavSquare to="/account">Twoje konto</NavSquare></NavSlot>}
+                    {/* 6 */}<div />
+                    {/* 7 */}<div />
+
+                    {/* 8 */}
+                    <div className="flex items-center justify-center px-1">
+                        <NavSquare to="/deck" disabled={!user}>Deck</NavSquare>
+                    </div>
+                    {/* 9 */}
+                    <div className="flex items-center justify-center px-1">
+                        <NavSquare to="/poke-game" disabled={!user}>Poke Game</NavSquare>
+                    </div>
+                    {/* 10 */}
+                    <div className="flex items-center justify-center px-1">
+                        {!user ? (
+                            <NavSquare to="/login">Login</NavSquare>
+                        ) : (
+                            <NavSquare to="/account">Twoje konto</NavSquare>
+                        )}
                     </div>
 
-                    {/* 5) Wyloguj skrajnie po prawej */}
-                    <div className="flex items-center justify-end ">
+                    {/* 11 */}
+                    <div className="flex items-center justify-center">
                         {user ? (
                             <button
-                                onClick={() => {
-                                    logout();
-                                    navigate("/home");
-                                }}
+                                type="button"
+                                onClick={handleLogout}
                                 title="Wyloguj się"
-                                className="inline-flex h-14 w-14 items-center justify-center rounded-2xl border border-black bg-white shadow hover:scale-105 transition"
+                                className="inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-black/10 app-glass shadow hover:scale-105 transition"
                             >
-                                <FaSignOutAlt className="text-slate-800 text-2xl"/>
+                                <FaSignOutAlt className="app-text-primary text-xl" />
                             </button>
                         ) : (
-                            // Placeholder utrzymujący układ
-                            <div className="h-14 w-14" aria-hidden />
+                            <div className="h-12 w-12" aria-hidden />
                         )}
+                    </div>
+
+                    {/* 12 */}
+                    <div className="flex items-center justify-center">
+                        <ThemeToggle themeMode={themeMode} setThemeMode={setThemeMode} />
+                    </div>
+
+                    {/* 13 */}<div />
+
+                    {/* Logo absolutnie na środku całego navbaru */}
+                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                        <div className="pointer-events-auto">
+                            <Link to="/" className="flex items-center justify-center">
+                                <img
+                                    src={Logo}
+                                    alt="Logo"
+                                    className="max-h-[74px] w-auto object-contain select-none"
+                                />
+                            </Link>
+                        </div>
                     </div>
                 </div>
 
-                {/* Mobile */}
-                <div className="md:hidden flex items-center justify-between h-16">
+                {/* MOBILE */}
+                <div className="md:hidden flex items-center justify-between h-16 px-4">
                     <button
-                        className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-black bg-white shadow-sm"
+                        type="button"
+                        className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-black/10 app-glass shadow-sm"
                         onClick={() => setOpen((o) => !o)}
                         aria-label="Open menu"
                     >
-                        <FaBars />
+                        <FaBars className="app-text-primary" />
                     </button>
 
                     <Link to="/" className="h-full grid place-items-center">
@@ -153,40 +303,47 @@ export default function Navbar() {
 
                     {user ? (
                         <button
-                            onClick={() => {
-                                logout();
-                                navigate("/home");
-                            }}
+                            type="button"
+                            onClick={handleLogout}
                             title="Wyloguj się"
-                            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-black bg-white shadow-sm"
+                            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-black/10 app-glass shadow-sm"
                         >
-                            <FaSignOutAlt />
+                            <FaSignOutAlt className="app-text-primary" />
                         </button>
                     ) : (
-                        <Link
-                            to="/login"
-                            className="inline-flex h-10 px-4 items-center justify-center rounded-xl border border-black bg-white shadow-sm font-semibold"
+                        <button
+                            type="button"
+                            onClick={() => goTo("/login")}
+                            className="inline-flex h-10 px-4 items-center justify-center rounded-xl border border-black/10 app-glass shadow-sm font-semibold app-text-primary"
                         >
                             Login
-                        </Link>
+                        </button>
                     )}
                 </div>
 
                 {open && (
-                    <div className="md:hidden pb-4">
+                    <div className="md:hidden pb-4 px-4">
+                        <div className="mb-3 flex justify-center">
+                            <ThemeToggle themeMode={themeMode} setThemeMode={setThemeMode} />
+                        </div>
+
                         <nav className="grid grid-cols-2 gap-3">
-                            <NavSquare to="/">Home</NavSquare>
-                            <NavSquare to="/pokedex">Pokedex</NavSquare>
-                            <NavSquare to="/album" disabled={!user}>
+                            <NavSquare compact onClick={() => goTo("/")}>Home</NavSquare>
+                            <NavSquare compact onClick={() => goTo("/pokedex")}>Pokedex</NavSquare>
+                            <NavSquare compact isActiveOverride={location.pathname.startsWith("/album")} onClick={goAlbum}>
                                 Album
                             </NavSquare>
-                            <NavSquare to="/deck" disabled={!user}>
+                            <NavSquare compact onClick={() => goTo("/deck")} disabled={!user}>
                                 Deck
                             </NavSquare>
-                            <NavSquare to="/poke-game" disabled={!user}>
+                            <NavSquare compact onClick={() => goTo("/poke-game")} disabled={!user}>
                                 Poke Game
                             </NavSquare>
-                            {user && <NavSquare to="/account">Twoje konto</NavSquare>}
+                            {user && (
+                                <NavSquare compact onClick={() => goTo("/account")}>
+                                    Twoje konto
+                                </NavSquare>
+                            )}
                         </nav>
                     </div>
                 )}

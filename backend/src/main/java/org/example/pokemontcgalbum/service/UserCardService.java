@@ -286,6 +286,9 @@ public class UserCardService {
             throw new RuntimeException("Nie jesteś właścicielem tej karty!");
         Deck deck = deckRepo.findById(deckId)
                 .orElseThrow(() -> new RuntimeException("Deck not found"));
+        if (deck.getUser() == null || !deck.getUser().getId().equals(user.getId())) {
+            throw new RuntimeException("Nie możesz edytować cudzego decka!");
+        }
         inst.setDeck(deck);
         userCardInstanceRepo.save(inst);
     }

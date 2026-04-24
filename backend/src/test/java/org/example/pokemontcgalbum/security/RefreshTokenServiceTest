@@ -1,0 +1,134 @@
+package org.example.pokemontcgalbum.security;
+
+import org.example.pokemontcgalbum.model.User;
+import org.example.pokemontcgalbum.repository.RefreshTokenRepository;
+import org.example.pokemontcgalbum.service.RefreshTokenService;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.*;
+
+import java.time.LocalDateTime;
+import java.util.Optional;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
+
+@ExtendWith(org.mockito.junit.jupiter.MockitoExtension.class)
+class RefreshTokenServiceTest {
+
+    @Mock
+    private RefreshTokenRepository refreshTokenRepository;
+
+    @InjectMocks
+    private RefreshTokenService refreshTokenService;
+
+    private User user;
+
+    @BeforeEach
+    void setup() {
+        user = User.builder()
+                .id(1L)
+                .username("piotr")
+                .password("x")
+                .build();
+    }
+
+    @Test
+    void createRefreshToken_shouldDeleteOldTokensAndSaveNewOne() {
+        // given
+        ArgumentCaptor<RefreshToken> tokenCaptor = ArgumentCaptor.forClass(RefreshToken.class);
+
+        // symulujemy zapis (repozytorium zwraca obiekt, który zapisano)
+        when(refreshTokenRepository.save(any(RefreshToken.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        // when
+        RefreshToken created = refreshTokenService.createRefreshToken(user);
+
+        // then: najpierw usuń stare tokeny
+        verify(refreshTokenRepository, times(1)).deleteByUser(user);
+
+        // potem zapis nowego
+        verify(refreshTokenRepository, times(1)).save(tokenCaptor.capture());
+
+        RefreshToken saved = tokenCaptor.getValue();
+        assertNotNull(saved.getToken(), "Token powinien być ustawiony");
+        assertFalse(saved.getToken().isBlank(), "Token nie powinien być pusty");
+        assertSame(user, saved.getUser(), "Token powinien być przypisany do usera");
+
+        assertNotNull(saved.getExpiryDate(), "ExpiryDate powinien być ustawiony");
+        assertTrue(saved.getExpiryDate().isAfter(LocalDateTime.now()),
+                "ExpiryDate powinien być w przyszłości");
+
+        // i created to de facto to samo co saved (bo save() zwraca argument)
+        assertEquals(saved.getToken(), created.getToken());
+        assertEquals(saved.getExpiryDate(), created.getExpiryDate());
+        assertSame(saved.getUser(), created.getUser());
+    }
+
+    @Test
+    void findByToken_shouldReturnOptionalFromRepo() {
+        // given
+        RefreshToken token = RefreshToken.builder()
+                .id(10L)
+                .token("abc")
+                .user(user)
+                .expiryDate(LocalDateTime.now().plusDays(1))
+                .build();
+
+        when(refreshTokenRepository.findByToken("abc")).thenReturn(Optional.of(token));
+
+        // when
+        Optional<RefreshToken> res = refreshTokenService.findByToken("abc");
+
+        // then
+        assertTrue(res.isPresent());
+        assertEquals("abc", res.get().getToken());
+        verify(refreshTokenRepository).findByToken("abc");
+    }
+
+    @Test
+    void isValid_shouldReturnFalseForNull() {
+        assertFalse(refreshTokenService.isValid(null));
+    }
+
+    @Test
+    void isValid_shouldReturnTrueForNotExpiredToken() {
+        RefreshToken token = RefreshToken.builder()
+                .token("t")
+                .user(user)
+                .expiryDate(LocalDateTime.now().plusMinutes(5))
+                .build();
+
+        assertTrue(refreshTokenService.isValid(token));
+    }
+
+    @Test
+    void isValid_shouldReturnFalseForExpiredToken() {
+        RefreshToken token = RefreshToken.builder()
+                .token("t")
+                .user(user)
+                .expiryDate(LocalDateTime.now().minusSeconds(1))
+                .build();
+
+        assertFalse(refreshTokenService.isValid(token));
+    }
+
+    @Test
+    void delete_shouldDelegateToRepository() {
+        // given
+        RefreshToken token = RefreshToken.builder()
+                .id(123L)
+                .token("x")
+                .user(user)
+                .expiryDate(LocalDateTime.now().plusDays(1))
+                .build();
+
+        // when
+        refreshTokenService.delete(token);
+
+        // then
+        verify(refreshTokenRepository, times(1)).delete(token);
+    }
+}

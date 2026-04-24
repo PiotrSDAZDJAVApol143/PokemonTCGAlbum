@@ -1,29 +1,34 @@
 import { useState, useEffect } from "react";
 import api from "../api";
-import { useNavigate } from "react-router-dom";
 
 export default function AlbumUserSetListView({ goBack, onSelectSet }) {
     const [sets, setSets] = useState([]);
 
     useEffect(() => {
-        api.get("/user-cards/sets").then(res => setSets(res.data));
+        api.get("/user-cards/sets").then((res) => setSets(res.data));
     }, []);
 
     return (
-        <div>
-            <button
-                className="mb-4 px-6 py-2 rounded bg-gray-200"
-                onClick={goBack}
-            >
-                ← Powrót
-            </button>
+        <div className="px-5 pt-2 pb-6">
+            {/* Góra widoku */}
+            <div className="mb-6 flex flex-col items-start gap-4">
+                <button
+                    className="px-6 py-2 rounded-xl bg-white/70 backdrop-blur-md border border-white/40 shadow-md text-slate-800 font-semibold hover:bg-white transition"
+                    onClick={goBack}
+                >
+                    ← Powrót
+                </button>
 
-            <div className="text-3xl font-bold mb-8">
-                Wybierz serię/set spośród swoich kart
+                <div className="px-6 py-4 rounded-2xl bg-white/20 backdrop-blur-md border border-white/35 shadow-lg">
+                    <h1 className="text-3xl font-bold text-slate-900">
+                        Wybierz serię/set spośród swoich kart
+                    </h1>
+                </div>
             </div>
 
-            <div className="grid grid-cols-5 gap-4">
-                {sets.map(set => {
+            {/* Kafelki setów */}
+            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-6">
+                {sets.map((set) => {
                     const unlocked = set.unlocked ?? 0;
                     const total = set.total ?? 0;
                     const percent =
@@ -32,33 +37,52 @@ export default function AlbumUserSetListView({ goBack, onSelectSet }) {
                     return (
                         <div
                             key={set.id}
-                            className="flex flex-col items-center cursor-pointer hover:bg-gray-100 rounded-lg p-3"
+                            className="group cursor-pointer"
                             onClick={() => onSelectSet(set.id)}
                         >
-                            {/* Logo */}
-                            <img
-                                src={set.logoUrl}
-                                alt={set.name}
-                                className="h-16 mb-2"
-                            />
+                            <div
+                                className="
+                                    h-full min-h-[240px]
+                                    flex flex-col items-center justify-start
+                                    rounded-2xl px-4 py-4
+                                    bg-white/20 backdrop-blur-md
+                                    border border-white/35
+                                    shadow-lg
+                                    transition-all duration-200
+                                    hover:bg-white
+                                    hover:shadow-2xl
+                                    hover:scale-[1.02]
+                                "
+                            >
+                                {/* Logo */}
+                                <div className="h-[72px] mb-3 flex items-center justify-center">
+                                    <img
+                                        src={set.logoUrl}
+                                        alt={set.name}
+                                        className="max-h-16 max-w-full object-contain drop-shadow-md"
+                                    />
+                                </div>
 
-                            {/* Nazwa seta */}
-                            <span className="font-bold text-xs">{set.name}</span>
+                                {/* Nazwa seta */}
+                                <div className="text-center font-bold text-sm leading-tight text-slate-900">
+                                    {set.name}
+                                </div>
 
-                            {/* Seria */}
-                            <span className="text-xs text-gray-500">
-                                {set.series}
-                            </span>
+                                {/* Seria */}
+                                <div className="mt-1 text-center text-xs text-slate-700">
+                                    {set.series}
+                                </div>
 
-                            {/* Liczba kart */}
-                            <span className="mt-2 text-sm text-indigo-800 font-bold">
-                                {unlocked} / {total || "?"}
-                            </span>
+                                {/* Liczba kart */}
+                                <div className="mt-3 text-base font-bold text-indigo-800">
+                                    {unlocked} / {total || "?"}
+                                </div>
 
-                            {/* Procent */}
-                            <span className="text-xs text-gray-700">
-                                ( {percent} % )
-                            </span>
+                                {/* Procent */}
+                                <div className="mt-1 text-xs font-medium text-slate-700">
+                                    ({percent} %)
+                                </div>
+                            </div>
                         </div>
                     );
                 })}
@@ -66,4 +90,3 @@ export default function AlbumUserSetListView({ goBack, onSelectSet }) {
         </div>
     );
 }
-

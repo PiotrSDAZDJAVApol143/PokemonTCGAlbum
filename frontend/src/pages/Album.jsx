@@ -3,8 +3,7 @@ import { useAuth } from "../context/AuthContext";
 import AlbumAllView from "./AlbumAllView";
 import AlbumSetListView from "./AlbumSetListView";
 import AlbumSetCardsView from "./AlbumSetCardsView";
-import AlbumUserView from "./AlbumUserAllView.jsx";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import AlbumUserAllView from "./AlbumUserAllView";
 import AlbumUserSetListView from "./AlbumUserSetListView";
 import AlbumUserSetCardsView from "./AlbumUserSetCardsView";
@@ -12,6 +11,7 @@ import AlbumUserSetCardsView from "./AlbumUserSetCardsView";
 export default function Album() {
     const { user } = useAuth();
     const location = useLocation();
+    const navigate = useNavigate();
 
     // Który widok?
 
@@ -105,6 +105,27 @@ export default function Album() {
     }
         // Przechwytujemy stan przy powrocie z CardDetails
     useEffect(() => {
+        // 1) RESET z Navbara ma priorytet
+        if (location.state?.resetAlbum) {
+            setStep(null);
+            setSelectedSet(null);
+
+            // opcjonalnie: reset paginacji/filtrów (zależy jak chcesz)
+            setAlbumPage(0);
+            setAlbumSearch("");
+            setSetPageIdx(0);
+            setSetSearch("");
+            setUserAlbumPage(0);
+            setUserAlbumSearch("");
+            setUserSetCardsPage(0);
+            setUserSetCardsSearch("");
+
+            // wyczyść state, żeby reset nie odpalał się drugi raz
+            navigate("/album", { replace: true, state: null });
+            return;
+        }
+
+        // 2) POWRÓT z CardDetails (Twoja logika)
         const s = location.state?.step;
         if (!s) return;
 
@@ -127,6 +148,10 @@ export default function Album() {
             setUserSetCardsPage(location.state.page ?? 0);
             setUserSetCardsSearch(location.state.search ?? "");
         }
+
+        // opcjonalnie: wyczyść state po odtworzeniu widoku
+        navigate("/album", { replace: true, state: null });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [location.state]);
 
     // Panel startowy (wybór przeglądu)

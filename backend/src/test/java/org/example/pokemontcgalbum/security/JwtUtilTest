@@ -1,0 +1,26 @@
+package org.example.pokemontcgalbum.security;
+
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+class JwtUtilTest {
+
+    private final JwtUtil jwtUtil = new JwtUtil();
+
+    @Test
+    void generateToken_and_parseUsername_shouldWork() {
+        String token = jwtUtil.generateToken("piotr", "USER");
+
+        assertTrue(jwtUtil.validateToken(token));
+        assertEquals("piotr", jwtUtil.getUsernameFromToken(token));
+        assertEquals("ROLE_USER", jwtUtil.getRoleFromToken(token));
+    }
+
+    @Test
+    void validateToken_shouldReturnFalse_forGarbage() {
+        assertFalse(jwtUtil.validateToken("abc.def.ghi"));
+        assertFalse(jwtUtil.validateToken(""));
+        assertFalse(jwtUtil.validateToken("Bearer xxx")); // format błędny
+    }
+}

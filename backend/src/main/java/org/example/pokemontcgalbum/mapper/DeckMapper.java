@@ -7,6 +7,7 @@ import org.example.pokemontcgalbum.dto.TcgCardDto;
 import org.example.pokemontcgalbum.model.Deck;
 import org.example.pokemontcgalbum.model.DeckCard;
 import org.example.pokemontcgalbum.model.UserCardInstance;
+import org.example.pokemontcgalbum.service.DeckPowerService;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -18,6 +19,7 @@ public class DeckMapper {
 
     private final TcgCardMapper tcgCardMapper;
     private final UserCardInstanceMapper userCardInstanceMapper;
+    private final DeckPowerService deckPowerService;
 
     public DeckDto toDto(Deck deck) {
         DeckDto dto = new DeckDto();
@@ -25,6 +27,10 @@ public class DeckMapper {
         dto.setName(deck.getName());
         dto.setBaseEnergy(deck.getBaseEnergy());
         dto.setSecondaryEnergy(deck.getSecondaryEnergy());
+        dto.setLogoUrl(deck.getLogoUrl());
+        dto.setWins(deck.getWins());
+        dto.setLosses(deck.getLosses());
+        dto.setDeckPower(deckPowerService.computeDeckPower(deck));
 
         // 1) Najpierw spróbuj z deck_cards (jeśli z nich korzystasz)
         if (deck.getDeckCards() != null && !deck.getDeckCards().isEmpty()) {

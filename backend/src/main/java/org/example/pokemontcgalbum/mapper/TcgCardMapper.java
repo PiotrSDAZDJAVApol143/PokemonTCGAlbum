@@ -15,6 +15,7 @@ public class TcgCardMapper {
 
         TcgCard card = new TcgCard();
         card.setId(dto.getId());
+        card.setNumberInSet(dto.getNumber());  // numberInSet z pola "number" (np. "1", "TG03", itd.)
         card.setName(dto.getName());
         card.setSupertype(dto.getSupertype());
         card.setSubtypes(dto.getSubtypes() != null ? String.join(",", dto.getSubtypes()) : null);
@@ -53,6 +54,7 @@ public class TcgCardMapper {
         if (dto.getRules() != null && !dto.getRules().isEmpty()) {
             List<TcgRule> rules = new ArrayList<>();
             for (String ruleText : dto.getRules()) {
+                if (ruleText == null || ruleText.isBlank()) continue; // <-- ważne
                 TcgRule rule = new TcgRule();
                 rule.setText(ruleText);
                 rule.setCard(card);

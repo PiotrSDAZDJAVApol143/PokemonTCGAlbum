@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.example.pokemontcgalbum.dto.DeckCreateRequest;
 import org.example.pokemontcgalbum.dto.DeckDto;
 import org.example.pokemontcgalbum.dto.DeckUpdateRequest;
+import org.example.pokemontcgalbum.dto.ShareDeckRequest;
 import org.example.pokemontcgalbum.mapper.DeckMapper;
 import org.example.pokemontcgalbum.model.Deck;
 import org.example.pokemontcgalbum.model.User;
@@ -22,7 +23,6 @@ import java.util.List;
 public class DeckController {
     private final UserService userService;
     private final UserDeckService deckService;
-    private final DeckMapper deckMapper;
 
     private User getUser(Authentication auth) {
         String username = auth.getName();
@@ -33,19 +33,22 @@ public class DeckController {
     @GetMapping("/decks")
     public List<DeckDto> getMyDecks(Authentication auth) {
         User user = getUser(auth);
-        return deckService.getDecksForUser(user).stream().map(deckMapper::toDto).toList();
+        return deckService.getAccessibleDecksForUser(user);
     }
+
     @PostMapping("/decks/add")
     public DeckDto createDeck(Authentication auth, @RequestBody DeckCreateRequest req) {
         User user = getUser(auth);
-        return deckMapper.toDto(deckService.createDeck(user, req));
+        Deck deck = deckService.createDeck(user, req);
+        return deckService.toOwnedDto(deck);
     }
 
     @PutMapping("/decks/{deckId}")
     public DeckDto updateDeck(Authentication auth, @PathVariable Long deckId,
                               @RequestBody DeckUpdateRequest req) {
         User user = getUser(auth);
-        return deckMapper.toDto(deckService.updateDeck(deckId, user, req));
+        Deck updated = deckService.updateDeck(deckId, user, req);
+        return deckService.toOwnedDto(updated);
     }
 
     @DeleteMapping("/decks/{deckId}")
@@ -60,4 +63,30 @@ public class DeckController {
         return deckService.getDeckDtoById(deckId, user);
     }
 
+    @PostMapping("/decks/{deckId}/share")
+    public void shareDeck(Authentication auth, @PathVariable Long deckId, @RequestBody ShareDeckRequest req) {
+        User user = getUser(auth);
+        deckService.shareDeck(deckId, user, req);
+    }
+
+    @PostMapping("/decks/{deckId}/win")
+    public DeckDto addWin(@PathVariable Long deckId, Authentication authentication) {
+        User user = getUser(authentication);
+        deckService.registerWin(deckId, user);
+        return deckService.getDeckDtoById(deckId, user);
+    }
+
+    @PostMapping("/decks/{deckId}/loss")
+    public DeckDto addLoss(@PathVariable Long deckId, Authentication authentication) {
+        User user = getUser(authentication);
+        deckService.registerLoss(deckId, user);
+        return deckService.getDeckDtoById(deckId, user);
+    }
+
+    @PostMapping("/decks/{deckId}/reset-score")
+    public DeckDto resetScore(@PathVariable Long deckId, Authentication authentication) {
+        User user = getUser(authentication);
+        deckService.resetScore(deckId, user);
+        return deckService.getDeckDtoById(deckId, user);
+    }
 }

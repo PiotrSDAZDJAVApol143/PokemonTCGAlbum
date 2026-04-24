@@ -11,10 +11,7 @@ import org.example.pokemontcgalbum.mapper.AbilityDefMapper;
 import org.example.pokemontcgalbum.mapper.AttackDefMapper;
 import org.example.pokemontcgalbum.repository.AbilityDefRepository;
 import org.example.pokemontcgalbum.repository.AttackDefRepository;
-import org.example.pokemontcgalbum.service.PokemonExportService;
-import org.example.pokemontcgalbum.service.TcgApiService;
-import org.example.pokemontcgalbum.service.TcgCardService;
-import org.example.pokemontcgalbum.service.UpdateMissingFieldsService;
+import org.example.pokemontcgalbum.service.*;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -37,6 +34,8 @@ public class DevController {
     private final AbilityDefRepository abilityDefRepository;
     private final AttackDefMapper attackDefMapper;
     private final AbilityDefMapper abilityDefMapper;
+    private final GithubTcgDataImportService githubImport;
+    private final GithubTcgDataImportService setSync;
 
     @GetMapping("/export-translations")
     public ResponseEntity<String> exportTranslations(
@@ -175,4 +174,16 @@ public class DevController {
             if (id != null && num != null) cardService.setPokedexNumber(id, num);
         });
     }
+    @PostMapping("/import/github-sets")
+    public ResponseEntity<String> importFromGithub(@RequestParam List<String> files) {
+        int total = 0;
+        for (String f : files) total += githubImport.importSetFile(f);
+        return ResponseEntity.ok("Zaimportowano nowych kart: " + total + " (pliki: " + files + ")");
+    }
+    @PostMapping("/sync/github-sets")
+    public ResponseEntity<String> syncSets(@RequestParam(defaultValue = "false") boolean updateExisting) {
+        int changed = setSync.syncSetsFromGithub(updateExisting);
+        return ResponseEntity.ok("Zsynchronizowano sety: " + changed + " (updateExisting=" + updateExisting + ")");
+    }
+
 }

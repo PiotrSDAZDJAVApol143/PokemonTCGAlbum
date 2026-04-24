@@ -2,5 +2,7 @@
 <project version="4">
   <component name="SqlDialectMappings">
     <file url="file://$PROJECT_DIR$/backend/src/main/resources/db/scripts/19_backfill_defs.sql" dialect="MySQL" />
+    <file url="file://$PROJECT_DIR$/backend/src/main/resources/db/scripts/30_create_table_pokemon_species_evolution.sql" dialect="MySQL" />
+    <file url="file://$PROJECT_DIR$/backend/src/main/resources/db/scripts/31_create_table_pokemon_play_evolution_rule.sql" dialect="MySQL" />
   </component>
 </project>

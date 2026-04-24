@@ -1,65 +1,133 @@
-import { useState, useEffect } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import api from "../api";
 import { useNavigate } from "react-router-dom";
 import UserAddCardPanel from "../components/UserAddCardPanel";
 
-/** Uniwersalny suwak krokowy */
+/** Uniwersalny suwak krokowy (klik + drag) */
 function Slider({
-                    steps,          // string[] np. ["recent","oldest",...]
-                    value,          // aktualna wartość z steps
-                    onChange,       // (newVal) => void
-                    width = 210,    // px
-                    thumb = 24,     // px (średnica kółka)
+                    steps,
+                    value,
+                    onChange,
+                    width = 210,
+                    thumb = 24,
+                    height = 32,
                     trackClass = "bg-purple-500",
                     tickClass = "bg-white/50",
+                    thumbClass = "bg-white",
+                    ariaLabel = "Slider",
                 }) {
-    const idx = Math.max(0, steps.indexOf(value));
-    const maxIdx = Math.max(steps.length - 1, 1);
-    const stepPx = (width - thumb) / maxIdx;
+    const trackRef = useRef(null);
+    const [dragging, setDragging] = useState(false);
+    const [measuredW, setMeasuredW] = useState(width);
 
-    const posToIndex = (clientX, targetEl) => {
-        const rect = targetEl.getBoundingClientRect();
-        const x = clientX - rect.left;
-        const ratio = Math.max(0, Math.min(1, x / rect.width));
+    const idxRaw = steps.indexOf(value);
+    const idx = idxRaw >= 0 ? idxRaw : 0;
+    const maxIdx = Math.max(steps.length - 1, 1);
+
+    const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+    useLayoutEffect(() => {
+        const el = trackRef.current;
+        if (!el) return;
+
+        const measure = () => {
+            const rect = el.getBoundingClientRect();
+            if (rect.width && Math.abs(rect.width - measuredW) > 0.5) {
+                setMeasuredW(rect.width);
+            }
+        };
+
+        measure();
+
+        const ro = new ResizeObserver(() => measure());
+        ro.observe(el);
+
+        const t = setTimeout(measure, 0);
+
+        return () => {
+            clearTimeout(t);
+            ro.disconnect();
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    const clientXToIndex = (clientX) => {
+        const el = trackRef.current;
+        if (!el) return idx;
+
+        const rect = el.getBoundingClientRect();
+        const raw = clientX - rect.left;
+
+        const usable = Math.max(1, rect.width - thumb);
+        const x = clamp(raw - thumb / 2, 0, usable);
+        const ratio = x / usable;
+
         return Math.round(ratio * maxIdx);
     };
 
-    const pick = (e) => {
-        const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
-        const newIdx = posToIndex(clientX, e.currentTarget);
+    const setFromClientX = (clientX) => {
+        const newIdx = clientXToIndex(clientX);
         const newVal = steps[newIdx];
         if (newVal && newVal !== value) onChange(newVal);
     };
 
-    const onKey = (e) => {
-        const i = idx;
+    const onPointerDown = (e) => {
+        e.preventDefault();
+        setDragging(true);
+        trackRef.current?.setPointerCapture?.(e.pointerId);
+        setFromClientX(e.clientX);
+    };
+
+    const onPointerMove = (e) => {
+        if (!dragging) return;
+        e.preventDefault();
+        setFromClientX(e.clientX);
+    };
+
+    const stopDrag = (e) => {
+        if (!dragging) return;
+        e.preventDefault();
+        setDragging(false);
+        trackRef.current?.releasePointerCapture?.(e.pointerId);
+    };
+
+    const onKeyDown = (e) => {
         if (e.key === "ArrowLeft" || e.key === "ArrowDown") {
-            const next = Math.max(0, i - 1);
-            if (next !== i) onChange(steps[next]);
+            const next = Math.max(0, idx - 1);
+            if (next !== idx) onChange(steps[next]);
         }
         if (e.key === "ArrowRight" || e.key === "ArrowUp") {
-            const next = Math.min(maxIdx, i + 1);
-            if (next !== i) onChange(steps[next]);
+            const next = Math.min(maxIdx, idx + 1);
+            if (next !== idx) onChange(steps[next]);
         }
     };
 
+    const usableW = Math.max(1, measuredW - thumb);
+    const xPx = maxIdx > 0 ? (idx / maxIdx) * usableW : 0;
+
     return (
         <div
-            className="relative select-none cursor-pointer"
-            style={{ width, height: thumb + 8 }}
+            ref={trackRef}
+            className="relative select-none overflow-hidden rounded-full"
+            style={{
+                width,
+                height,
+                touchAction: "none",
+            }}
             role="slider"
+            aria-label={ariaLabel}
             aria-valuemin={0}
             aria-valuemax={maxIdx}
             aria-valuenow={idx}
             tabIndex={0}
-            onKeyDown={onKey}
-            onClick={pick}
-            onTouchStart={pick}
+            onKeyDown={onKeyDown}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={stopDrag}
+            onPointerCancel={stopDrag}
         >
-            {/* tor */}
-            <div className={`absolute inset-0 rounded-full ${trackClass}`} />
+            <div className={`absolute inset-0 ${trackClass}`} />
 
-            {/* kreski pozycji */}
             {steps.map((_, i) => (
                 <div
                     key={i}
@@ -68,85 +136,14 @@ function Slider({
                 />
             ))}
 
-            {/* kółko */}
             <div
-                className="absolute top-1 left-1 rounded-full bg-white shadow transition-transform duration-100"
+                className={`absolute top-1/2 -translate-y-1/2 rounded-full shadow ${thumbClass} cursor-grab active:cursor-grabbing`}
                 style={{
                     width: thumb,
                     height: thumb,
-                    transform: `translateX(${idx * stepPx}px)`,
+                    left: xPx,
                 }}
             />
-        </div>
-    );
-}
-
-/** Suwak „Wyświetl” z podpisem o stałej wysokości i stałą szerokością kolumny */
-function DisplaySlider({ displayFilter, setDisplayFilter }) {
-    const SHOW_STEPS = ["all", "assigned", "unassigned"];
-    const MAX = SHOW_STEPS.length - 1;
-    const labels = {
-        all: "Wszystkie",
-        assigned: "Przydzielone (mają coś w deckach)",
-        unassigned: "Nieprzydzielone (mają wolne egzemplarze)",
-    };
-
-    const idx = SHOW_STEPS.indexOf(displayFilter);
-    const trackW = 210;
-    const knob = 28; // ~w-6 + marginesy
-
-    const handleFromX = (clientX, rect) => {
-        const x = clientX - rect.left;
-        const ratio = Math.max(0, Math.min(1, x / rect.width));
-        const i = Math.round(ratio * MAX);
-        const val = SHOW_STEPS[i];
-        if (val && val !== displayFilter) setDisplayFilter(val);
-    };
-
-    return (
-        <div className="w-[280px] flex flex-col items-center">
-            <div className="text-lg font-semibold mb-1">Wyświetl</div>
-
-            <div
-                className="relative select-none cursor-pointer"
-                style={{ width: trackW, height: 32 }}
-                role="slider"
-                aria-valuemin={0}
-                aria-valuemax={MAX}
-                aria-valuenow={idx}
-                aria-label="Wyświetl"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                    if (e.key === "ArrowLeft" || e.key === "ArrowDown") {
-                        const next = Math.max(0, idx - 1);
-                        setDisplayFilter(SHOW_STEPS[next]);
-                    }
-                    if (e.key === "ArrowRight" || e.key === "ArrowUp") {
-                        const next = Math.min(MAX, idx + 1);
-                        setDisplayFilter(SHOW_STEPS[next]);
-                    }
-                }}
-                onClick={(e) => handleFromX(e.clientX, e.currentTarget.getBoundingClientRect())}
-                onTouchStart={(e) => handleFromX(e.touches[0].clientX, e.currentTarget.getBoundingClientRect())}
-            >
-                <div className="absolute inset-0 rounded-full bg-indigo-600" />
-                {Array.from({ length: SHOW_STEPS.length }, (_, i) => (
-                    <div
-                        key={i}
-                        className="absolute top-1/2 -translate-y-1/2 w-px h-4 bg-white/50"
-                        style={{ left: `${(i / MAX) * 100}%` }}
-                    />
-                ))}
-                <div
-                    className="absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow transition-transform duration-100"
-                    style={{ transform: `translateX(${idx * ((trackW - knob) / Math.max(1, MAX))}px)` }}
-                />
-            </div>
-
-            {/* podpis – STAŁA wysokość */}
-            <div className="mt-2 h-5 text-sm text-gray-800 text-center whitespace-nowrap overflow-hidden text-ellipsis w-full">
-                {labels[displayFilter]}
-            </div>
         </div>
     );
 }
@@ -155,36 +152,34 @@ export default function AlbumUserAllView({ goBack, page = 0, setPage, search, se
     const [userCards, setUserCards] = useState([]);
     const [totalPages, setTotalPages] = useState(1);
     const [summary, setSummary] = useState({ total: 0, unique: 0, duplicates: 0 });
+    const [addOpen, setAddOpen] = useState(false);
 
-    // SORT
     const SORT_STEPS = ["recent", "oldest", "name_az", "name_za", "pokedex", "overallRating"];
     const sortLabels = {
         recent: "Ostatnio dodane",
         oldest: "Najstarsze",
-        name_az: "Alfabetycznie A–Z",
-        name_za: "Alfabetycznie Z–A",
-        pokedex: "Pokedex (najnowsze wydanie najpierw)",
-        overallRating: "Moc Pokémona (siła malejąco)",
+        name_az: "A–Z",
+        name_za: "Z–A",
+        pokedex: "Pokedex",
+        overallRating: "Moc (malejąco)",
     };
-    const [sortMode, setSortMode] = useState(
-        () => localStorage.getItem("albumUserAll.sort") || "recent"
-    );
-    useEffect(() => {
-        localStorage.setItem("albumUserAll.sort", sortMode);
-    }, [sortMode]);
 
-    // WYŚWIETL (suwak 3-pozycyjny)
-    const [displayFilter, setDisplayFilter] = useState(
-        () => localStorage.getItem("albumUserAll.show") || "all"
-    );
-    useEffect(() => {
-        localStorage.setItem("albumUserAll.show", displayFilter);
-    }, [displayFilter]);
+    const [sortMode, setSortMode] = useState(() => localStorage.getItem("albumUserAll.sort") || "recent");
+    useEffect(() => localStorage.setItem("albumUserAll.sort", sortMode), [sortMode]);
+
+    const SHOW_STEPS = ["all", "assigned", "unassigned"];
+    const showLabels = {
+        all: "Wszystkie",
+        assigned: "Przydzielone",
+        unassigned: "Nieprzydzielone",
+    };
+
+    const [displayFilter, setDisplayFilter] = useState(() => localStorage.getItem("albumUserAll.show") || "all");
+    useEffect(() => localStorage.setItem("albumUserAll.show", displayFilter), [displayFilter]);
 
     const navigate = useNavigate();
     const size = 10;
 
-    // POBIERANIE
     useEffect(() => {
         api
             .get("/user-cards/search", {
@@ -201,7 +196,6 @@ export default function AlbumUserAllView({ goBack, page = 0, setPage, search, se
             });
     }, [page, search, sortMode, displayFilter]);
 
-    // odśwież po dodaniu
     const refresh = () => {
         api
             .get("/user-cards/search", {
@@ -219,79 +213,97 @@ export default function AlbumUserAllView({ goBack, page = 0, setPage, search, se
     };
 
     return (
-        <div className="px-5 pt-1">
-            {/* --- Górny pasek (SZTYWNY UKŁAD) --- */}
-            <div
-                className="
-          grid grid-cols-[auto,1fr,auto,auto]
-          items-start gap-6 mb-5
-        "
-            >
-                {/* 1) Powrót */}
-                <button className="px-6 py-2 rounded bg-gray-200 font-bold" onClick={goBack}>
-                    ← Powrót
-                </button>
+        <div className="px-5 pt-0">
+            <div className="bg-white rounded-2xl border p-4 mb-2">
+                <div className="flex items-center gap-6">
+                    <button className="px-6 h-11 rounded bg-gray-200 font-bold" onClick={goBack}>
+                        ← Powrót
+                    </button>
 
-                {/* 2) Info o kolekcji – wypełnia wolne miejsce */}
-                <span className="text-xl font-bold place-self-center">
-          Informacje o Twojej kolekcji:&nbsp;
-                    <span className="text-black">{summary.unique}</span> z {summary.total} kart
-                    {summary.duplicates > 0 && (
-                        <span className="text-gray-700">  (+ {summary.duplicates} duplikaty)</span>
-                    )}
-        </span>
+                    <div className="text-lg font-bold whitespace-nowrap">
+                        Informacje o Twojej kolekcji:&nbsp;
+                        <span className="text-black">{summary.unique}</span> z {summary.total} kart
+                        {summary.duplicates > 0 && (
+                            <span className="text-gray-700"> (+ {summary.duplicates} duplikaty)</span>
+                        )}
+                    </div>
 
-                {/* 3) Blok sterowania: 2 kolumny o stałej szerokości */}
-                <div className="grid grid-cols-2 gap-8">
-                    {/* SORTOWANIE (stała szerokość kolumny) */}
-                    <div className="w-[280px] flex flex-col items-center">
-                        <div className="text-lg font-semibold mb-1">Sortowanie</div>
-                        <Slider
-                            steps={SORT_STEPS}
-                            value={sortMode}
-                            onChange={(v) => {
-                                setSortMode(v);
-                                setPage(0);
-                            }}
-                            width={210}
-                            thumb={24}
-                            trackClass="bg-purple-500"
-                            tickClass="bg-white/50"
-                        />
-                        {/* podpis – stała wysokość */}
-                        <div className="mt-2 h-5 text-sm text-gray-800 text-center whitespace-nowrap overflow-hidden text-ellipsis w-full">
-                            {sortLabels[sortMode]}
+                    <div className="ml-auto flex items-center gap-8">
+                        <div className="w-[360px] flex items-center gap-3">
+                            <div className="text-base font-semibold whitespace-nowrap">Sortowanie</div>
+                            <Slider
+                                steps={SORT_STEPS}
+                                value={sortMode}
+                                onChange={(v) => {
+                                    setSortMode(v);
+                                    setPage(0);
+                                }}
+                                width={210}
+                                thumb={24}
+                                height={32}
+                                trackClass="bg-purple-500"
+                                tickClass="bg-white/50"
+                                ariaLabel="Sortowanie"
+                            />
+                            <div className="text-sm text-gray-700 whitespace-nowrap w-[130px]">
+                                {sortLabels[sortMode]}
+                            </div>
+                        </div>
+
+                        <div className="w-[280px] flex items-center gap-3">
+                            <div className="text-base font-semibold whitespace-nowrap">Wyświetl</div>
+                            <Slider
+                                steps={SHOW_STEPS}
+                                value={displayFilter}
+                                onChange={(v) => {
+                                    setDisplayFilter(v);
+                                    setPage(0);
+                                }}
+                                width={210}
+                                thumb={24}
+                                height={32}
+                                trackClass="bg-indigo-600"
+                                tickClass="bg-white/50"
+                                ariaLabel="Wyświetl"
+                            />
+                            <div className="text-sm text-gray-700 whitespace-nowrap w-[120px]">
+                                {showLabels[displayFilter]}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="mt-3 flex items-center justify-between gap-6">
+                    <div className="flex items-center gap-3">
+                        <button
+                            className="h-11 px-5 rounded-xl bg-blue-600 text-white font-bold border border-black/20 shadow hover:brightness-110"
+                            onClick={() => setAddOpen((o) => !o)}
+                        >
+                            Dodaj kartę do albumu
+                        </button>
+                        <div className="text-sm text-gray-600 hidden lg:block">
+                            Wyszukuj w bazie i dodawaj 1 kliknięciem (podgląd lupą).
                         </div>
                     </div>
 
-                    {/* WYŚWIETL – slider 3-pozycyjny (stała szerokość kolumny) */}
-                    <DisplaySlider
-                        displayFilter={displayFilter}
-                        setDisplayFilter={(v) => {
-                            setDisplayFilter(v);
+                    <input
+                        className="h-11 border px-4 rounded w-80"
+                        placeholder="Szukaj nazwę Pokemona..."
+                        value={search}
+                        onChange={(e) => {
+                            setSearch(e.target.value);
                             setPage(0);
                         }}
                     />
                 </div>
 
-                {/* 4) Wyszukiwarka */}
-                <input
-                    className="border px-4 py-2 rounded w-80"
-                    placeholder="Szukaj nazwę Pokemona..."
-                    value={search}
-                    onChange={(e) => {
-                        setSearch(e.target.value);
-                        setPage(0);
-                    }}
-                />
+                {addOpen && (
+                    <div className="mt-3">
+                        <UserAddCardPanel onCardAdded={refresh} variant="inline" />
+                    </div>
+                )}
             </div>
 
-            {/* Panel dodawania kart */}
-            <div className="mb-6">
-                <UserAddCardPanel onCardAdded={refresh} />
-            </div>
-
-            {/* --- Miniatury kart --- */}
             <div className="grid grid-cols-5 gap-8 mb-6">
                 {userCards.map((userCard, i) => (
                     <div
@@ -318,31 +330,42 @@ export default function AlbumUserAllView({ goBack, page = 0, setPage, search, se
                             className="w-[220px] h-[310px] object-contain drop-shadow-lg"
                             style={{ background: "#fff", borderRadius: "12px" }}
                         />
-                        <div className="font-bold mt-2">{userCard.cardName}</div>
-                        {userCard.quantity > 1 && (
-                            <span className="text-sm text-gray-500">x{userCard.quantity}</span>
-                        )}
+
+                        <div className="w-[220px] mt-3 px-3 py-2 rounded-2xl bg-white/30 backdrop-blur-md border border-white/40 shadow-lg">
+                            <div className="text-center font-bold text-[18px] leading-tight text-slate-900 drop-shadow-sm">
+                                {userCard.cardName}
+                            </div>
+
+                            {userCard.quantity > 1 && (
+                                <div className="mt-1 text-center text-sm font-semibold text-slate-700">
+                                    x{userCard.quantity}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 ))}
             </div>
 
-            {/* --- Paginacja --- */}
-            <div className="mt-8 flex justify-center items-center gap-4">
+            <div className="mt-4 flex justify-center">
+                <div className="flex items-center gap-4 px-5 py-3 rounded-2xl bg-white/30 backdrop-blur-md border border-white/40 shadow-lg">
                 <button
-                    className="px-4 py-2 rounded border"
+                    className="px-4 py-2 rounded-xl bg-white/70 hover:bg-white text-slate-800 font-semibold border border-white/50 disabled:opacity-50 disabled:cursor-not-allowed transition"
                     onClick={() => setPage((p) => Math.max(0, p - 1))}
                     disabled={page === 0}
                 >
                     Poprzednia
                 </button>
-                <span>{page + 1} / {totalPages}</span>
-                <button
-                    className="px-4 py-2 rounded border"
-                    onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-                    disabled={page >= totalPages - 1}
-                >
-                    Następna
-                </button>
+                <div className="min-w-[90px] text-center font-bold text-slate-900">
+                    {page + 1} / {totalPages}
+                </div>
+                    <button
+                        className="px-4 py-2 rounded-xl bg-white/70 hover:bg-white text-slate-800 font-semibold border border-white/50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                        onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                        disabled={page >= totalPages - 1}
+                    >
+                        Następna
+                    </button>
+            </div>
             </div>
         </div>
     );

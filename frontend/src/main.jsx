@@ -9,11 +9,13 @@ import Album from "./pages/Album";
 import Deck from "./pages/Deck";
 import PokeGame from "./pages/PokeGame";
 import Login from "./pages/Login";
+import Account from "./pages/Account";
 import "./index.css";
 import {AuthProvider} from "./context/AuthContext.jsx";
 import CardDetails from './pages/CardDetails';
 import AlbumUserSetListView from "./pages/AlbumUserSetListView.jsx";
 import AlbumUserSetCardsView from "./pages/AlbumUserSetCardsView.jsx";
+import PokeGameDeckViewer from "./pages/PokeGameDeckViewer";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
     <BrowserRouter>
@@ -29,6 +31,8 @@ ReactDOM.createRoot(document.getElementById("root")).render(
                     <Route path="/card/:cardId" element={<CardDetails />} />
                     <Route path="deck" element={<Deck/>}/>
                     <Route path="poke-game" element={<PokeGame/>}/>
+                    <Route path="poke-game/deck/:deckId" element={<PokeGameDeckViewer />} />
+                    <Route path="/account" element={<Account />} />
                     <Route path="login" element={<Login/>}/>
                 </Route>
             </Routes>

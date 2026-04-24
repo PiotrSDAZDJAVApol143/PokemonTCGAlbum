@@ -7,4 +7,5 @@ public class DeckUpdateRequest {
     private String name;
     private String baseEnergy;
     private String secondaryEnergy;
+    private String logoUrl;
 }

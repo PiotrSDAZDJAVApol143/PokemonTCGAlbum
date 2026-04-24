@@ -528,3 +528,118 @@ databaseChangeLog:
         - dropColumn:
             tableName: tcg_rule
             columnName: rating
+
+  - changeSet:
+      id: 28-add-wins-to-decks
+      author: piotr
+      preConditions:
+        onFail: MARK_RAN
+        not:
+          columnExists:
+            tableName: decks
+            columnName: wins
+      changes:
+        - addColumn:
+            tableName: decks
+            columns:
+              - column:
+                  name: wins
+                  type: INT
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+
+  - changeSet:
+      id: 29-add-losses-to-decks
+      author: piotr
+      preConditions:
+        onFail: MARK_RAN
+        not:
+          columnExists:
+            tableName: decks
+            columnName: losses
+      changes:
+        - addColumn:
+            tableName: decks
+            columns:
+              - column:
+                  name: losses
+                  type: INT
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+  - changeSet:
+      id: 30_create_table_pokemon_species_evolution
+      author: piotr
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            tableExists:
+              tableName: pokemon_species_evolution
+      changes:
+        - sqlFile:
+            path: scripts/30_create_table_pokemon_species_evolution.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+            stripComments: true
+
+  - changeSet:
+      id: 31_create_table_pokemon_play_evolution_rule
+      author: piotr
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            tableExists:
+              tableName: pokemon_play_evolution_rule
+      changes:
+        - sqlFile:
+            path: scripts/31_create_table_pokemon_play_evolution_rule.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+            stripComments: true
+
+  - changeSet:
+      id: 32_load_pokemon_species_evolution_csv
+      author: piotr
+      preConditions:
+        - onFail: MARK_RAN
+        - tableExists:
+            tableName: pokemon_species_evolution
+      changes:
+        - loadData:
+            file: scripts/data/pokemon_species_evolution.csv
+            relativeToChangelogFile: true
+            tableName: pokemon_species_evolution
+            separator: ","
+            quotchar: '"'
+            encoding: UTF-8
+
+  - changeSet:
+      id: 33_load_pokemon_play_evolution_rule_csv
+      author: piotr
+      preConditions:
+        - onFail: MARK_RAN
+        - tableExists:
+            tableName: pokemon_play_evolution_rule
+      changes:
+        - loadData:
+            file: scripts/data/pokemon_play_evolution_rule.csv
+            relativeToChangelogFile: true
+            tableName: pokemon_play_evolution_rule
+            separator: ","
+            quotchar: '"'
+            encoding: UTF-8
+  - changeSet:
+      id: 34_create_table_deck_share
+      author: piotr
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            tableExists:
+              tableName: deck_share
+      changes:
+        - sqlFile:
+            path: scripts/34_create_table_deck_share.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+            stripComments: true

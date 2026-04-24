@@ -28,4 +28,14 @@ public class WebClientConfig {
                 .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(4 * 1024 * 1024)) // 4 MB
                 .build();
     }
+    @Bean
+    public WebClient githubRawWebClient() {
+        return WebClient.builder()
+                .baseUrl("https://raw.githubusercontent.com")
+                .clientConnector(new ReactorClientHttpConnector(HttpClient.create()
+                        .responseTimeout(java.time.Duration.ofSeconds(120))))
+                .codecs(cfg -> cfg.defaultCodecs().maxInMemorySize(50 * 1024 * 1024)) // 50MB
+                .build();
+    }
+
 }

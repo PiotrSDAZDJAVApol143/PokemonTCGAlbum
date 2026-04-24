@@ -21,7 +21,7 @@ public class CardRatingCalculator {
     private static final double RETREAT_WEIGHT   = 5.0;
 
     // Parametry normalizacji i miękkiego capa
-    private static final double ATTACKS_SOFT_K   = 60.0; // im mniejsze, tym szybciej „saturuje”
+    private static final double ATTACKS_SOFT_K   = 60.0;
 
     public int computeAutoRating(TcgCard c) {
         if (c == null) return 0;
@@ -38,7 +38,7 @@ public class CardRatingCalculator {
         // 4) Rules (po staremu, cap do 5% wagi)
         double rulesScore = rulesScore(c.getRules());
 
-        // 5) Retreat (0..RETREAT_WEIGHT)
+        // 5) Retreat (0.RETREAT_WEIGHT)
         double retreatScore = retreatScore(safeInt(c.getRetreat()));
 
         // Suma i clamp

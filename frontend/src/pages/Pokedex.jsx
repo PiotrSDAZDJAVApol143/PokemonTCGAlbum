@@ -10,6 +10,7 @@ export default function Pokedex() {
 
     if (!view) {
         return (
+            <div className="glass-panel p-10">
             <div className="flex justify-center gap-20 p-16">
                 {/* Wszystkie Pokemony */}
                 <div className="flex-1 flex flex-col items-center">
@@ -39,6 +40,7 @@ export default function Pokedex() {
             opis: zobacz wszystkie posiadane pokemony
           </span>
                 </div>
+            </div>
             </div>
         );
     }

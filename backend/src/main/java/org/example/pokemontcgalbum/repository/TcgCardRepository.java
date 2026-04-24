@@ -87,4 +87,12 @@ public interface TcgCardRepository extends JpaRepository<TcgCard, String> {
     Page<TcgCard> findByNumberInSetAndSet_PrintedTotal(String numberInSet, Integer printedTotal, Pageable pageable);
 
     Page<TcgCard> findByNumberInSetIgnoreCase(String numberInSet, Pageable pageable);
+
+    @Query("""
+    SELECT c
+    FROM TcgCard c
+    WHERE c.supertype = 'Pokémon'
+      AND c.pokedexNumber IN :pokedexNumbers
+""")
+    List<TcgCard> findAllPokemonByPokedexNumbers(@Param("pokedexNumbers") List<Integer> pokedexNumbers);
 }

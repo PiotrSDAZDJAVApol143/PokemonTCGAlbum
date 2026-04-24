@@ -32,7 +32,7 @@ export default function AlbumSetCardsView({
     }, [setId]);
 
     return (
-        <div className="flex flex-col min-h-screen bg-[#f7f8fa] overflow-hidden">
+        <div className="flex flex-col min-h-screen overflow-hidden">
             <div className=" flex items-center justify-between px-14 py-4">
                 <button
                     className="px-6 py-2 rounded bg-gray-200 font-bold"
@@ -105,7 +105,7 @@ export default function AlbumSetCardsView({
                 </button>
             </div>
 
-            <Footer />
+            <Footer/>
         </div>
     );
 }
