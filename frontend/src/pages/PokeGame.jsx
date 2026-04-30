@@ -1,7 +1,7 @@
 // PokeGame.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import api from "../api";
+import { getDecks } from "../services/deckService.js";
 import { useAutoDeckImage } from "../components/useAutoDeckImage";
 
 const ARROW_SRC = "/slot_arrow.png"; // public/slot_arrow.png
@@ -328,6 +328,7 @@ export default function PokeGame() {
 
     const [decks, setDecks] = useState([]);
     const [loadingDecks, setLoadingDecks] = useState(true);
+    const [deckLoadError, setDeckLoadError] = useState("");
 
     // indeks "środkowej" talii
     const [currentIndex, setCurrentIndex] = useState(0);
@@ -346,19 +347,59 @@ export default function PokeGame() {
     }, [location.state?.reopenSinglePlayer]);
 
     useEffect(() => {
+        let cancelled = false;
+
         setLoadingDecks(true);
-        api
-            .get("/user/decks")
-            .then((res) => {
-                const list = Array.isArray(res.data) ? res.data : res.data?.decks || res.data?.content || [];
-                setDecks(list);
+        setDeckLoadError("");
+
+        getDecks()
+            .then((loadedDecks) => {
+                if (cancelled) return;
+
+                setDecks(Array.isArray(loadedDecks) ? loadedDecks : []);
             })
-            .catch(() => setDecks([]))
-            .finally(() => setLoadingDecks(false));
+            .catch((e) => {
+                if (cancelled) return;
+
+                setDecks([]);
+                setDeckLoadError(
+                    e?.response?.data?.message ||
+                    e?.response?.data ||
+                    e?.message ||
+                    "Nie udało się wczytać talii."
+                );
+            })
+            .finally(() => {
+                if (cancelled) return;
+                setLoadingDecks(false);
+            });
+
+        return () => {
+            cancelled = true;
+        };
     }, []);
 
     // tylko talie z dokładnie 60 kart
     const eligibleDecks = useMemo(() => (decks || []).filter((d) => totalCardsInDeck(d) === 60), [decks]);
+    const isOfflineDeckSource = useMemo(
+        () => (decks || []).some((deck) => deck?.offlineSnapshot),
+        [decks]
+    );
+    useEffect(() => {
+        const n = eligibleDecks.length;
+
+        if (n === 0) {
+            setCurrentIndex(0);
+            setResultIndex(null);
+            return;
+        }
+
+        setCurrentIndex((idx) => {
+            if (idx < 0) return 0;
+            if (idx >= n) return n - 1;
+            return idx;
+        });
+    }, [eligibleDecks.length]);
 
     // bezpieczne indeksy prev/next
     const prevIndex = useMemo(() => {
@@ -596,6 +637,18 @@ export default function PokeGame() {
                 </div>
 
                 <div className="bg-white/70 backdrop-blur-md border rounded-2xl shadow p-6">
+                    {isOfflineDeckSource && (
+                        <div className="mb-4 rounded-2xl border border-amber-300 bg-amber-50/90 px-4 py-3 text-sm text-amber-900 font-semibold">
+                            Tryb offline: talie zostały wczytane z lokalnego snapshotu.
+                            Możesz losować talię i otworzyć podgląd, ale edycja oraz zapis wyników wymagają backendu.
+                        </div>
+                    )}
+
+                    {deckLoadError && (
+                        <div className="mb-4 rounded-2xl border border-red-300 bg-red-50/90 px-4 py-3 text-sm text-red-800 font-semibold">
+                            {deckLoadError}
+                        </div>
+                    )}
                     <div className="flex justify-center mb-5">
                         <button
                             type="button"
@@ -663,6 +716,11 @@ export default function PokeGame() {
                                 <div className="text-sm text-gray-600 mb-1">
                                     {isSpinning ? "Losowanie trwa…" : resultIndex != null ? "Wylosowano:" : "Gotowy do losowania"}
                                 </div>
+                                {selectedDeck?.offlineSnapshot && (
+                                    <div className="text-xs text-amber-700 font-bold mb-1">
+                                        Snapshot offline / read-only
+                                    </div>
+                                )}
 
                                 {canOpenDeckViewer ? (
                                     <button

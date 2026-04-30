@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import api from "../api";
+import { getDeckById } from "../services/deckService.js";
+import CardImage from "../components/CardImage.jsx";
 
 function SpeakerButton({ onClick, title = "Odczytaj tekst" }) {
     return (
@@ -176,12 +177,12 @@ function wrapIndex(index, total) {
     return ((index % total) + total) % total;
 }
 
-function getVisibleOffsets(total, maxVisible = 9) {
+function getVisibleOffsetsAround(total, centerOffset = 0, maxVisible = 11) {
     if (total <= 0) return [];
 
     const visibleCount = Math.min(total, maxVisible);
     const half = Math.floor(visibleCount / 2);
-    const start = -half;
+    const start = centerOffset - half;
 
     return Array.from({ length: visibleCount }, (_, i) => start + i);
 }
@@ -190,9 +191,27 @@ function InfoBlock({ title, children, speakerText }) {
     return (
         <div className="grid grid-cols-[52px_minmax(0,1fr)] gap-4 items-start">
             <SpeakerButton onClick={() => speakText(speakerText)} />
-            <div className="rounded-2xl bg-white/72 backdrop-blur-xl border border-white/75 px-4 py-3 shadow-[0_10px_30px_rgba(0,0,0,0.16)] min-h-[120px]">
-                <div className="text-xl font-extrabold text-slate-900 mb-2">{title}</div>
-                <div className="text-[15px] leading-relaxed text-slate-900">{children}</div>
+
+            <div className="relative overflow-hidden rounded-2xl border border-white/60 shadow-[0_10px_26px_rgba(0,0,0,0.14)] min-h-[112px]">
+                {/* warstwa glass */}
+                <div className="absolute inset-0 bg-slate-200/18 backdrop-blur-md" />
+
+                {/* delikatna mleczna / szarawa poświata */}
+                <div className="absolute inset-0 bg-gradient-to-br from-white/38 via-slate-100/20 to-slate-400/10" />
+
+                {/* lekka wewnętrzna poświata / ramka */}
+                <div className="absolute inset-[1px] rounded-2xl border border-white/20" />
+
+                {/* treść */}
+                <div className="relative z-10 px-4 py-3">
+                    <div className="text-xl font-extrabold text-slate-950 mb-2 drop-shadow-[0_1px_0_rgba(255,255,255,0.18)]">
+                        {title}
+                    </div>
+
+                    <div className="text-[15px] leading-relaxed text-slate-900 font-medium">
+                        {children}
+                    </div>
+                </div>
             </div>
         </div>
     );
@@ -243,7 +262,7 @@ const CAROUSEL_CARD_HEIGHT = 196;
 const CAROUSEL_STEP_PX = 146;       // odstęp między środkami kart
 const DRAG_SNAP_RATIO = 0.22;       // ile trzeba przesunąć, żeby przeskoczyć na następną kartę
 
-const MAIN_SECTION_HEIGHT = "clamp(620px, 60vh, 720px)";
+const MAIN_SECTION_HEIGHT = "clamp(750px, 64vh, 850px)";
 const LEFT_META_BOX_HEIGHT = "170px";
 const CAROUSEL_PANEL_HEIGHT = "330px";
 
@@ -267,6 +286,7 @@ export default function PokeGameDeckViewer() {
 
     const [deck, setDeck] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState("");
     const [currentIdx, setCurrentIdx] = useState(0);
     const [dragging, setDragging] = useState(false);
     const [dragOffsetPx, setDragOffsetPx] = useState(0);
@@ -303,15 +323,24 @@ export default function PokeGameDeckViewer() {
         let cancelled = false;
 
         setLoading(true);
-        api.get(`/user/decks/${deckId}`)
-            .then((res) => {
+        setLoadError("");
+
+        getDeckById(deckId)
+            .then((loadedDeck) => {
                 if (cancelled) return;
-                setDeck(res.data);
+                setDeck(loadedDeck);
                 setCurrentIdx(0);
             })
-            .catch(() => {
+            .catch((e) => {
                 if (cancelled) return;
+
                 setDeck(null);
+                setLoadError(
+                    e?.response?.data?.message ||
+                    e?.response?.data ||
+                    e?.message ||
+                    "Nie udało się wczytać talii."
+                );
             })
             .finally(() => {
                 if (cancelled) return;
@@ -336,6 +365,8 @@ export default function PokeGameDeckViewer() {
         uniqueDeckCards.length > 0 ? uniqueDeckCards[wrapIndex(currentIdx, uniqueDeckCards.length)] : null;
 
     const activeCard = activeDeckEntry?.card || null;
+    const isOfflineDeck = !!deck?.offlineSnapshot;
+    const isReadOnlyDeck = !!deck?.readOnly || isOfflineDeck;
 
     const cardKind = useMemo(() => getCardKind(activeCard), [activeCard]);
 
@@ -499,9 +530,15 @@ export default function PokeGameDeckViewer() {
         specialAttack,
     ]);
 
+    const dragProgress = dragOffsetPx / CAROUSEL_STEP_PX;
+
+    const dragCenterOffset = dragging
+        ? Math.round(-dragProgress)
+        : 0;
+
     const visibleOffsets = useMemo(
-        () => getVisibleOffsets(uniqueDeckCards.length, 9),
-        [uniqueDeckCards.length]
+        () => getVisibleOffsetsAround(uniqueDeckCards.length, dragCenterOffset, 11),
+        [uniqueDeckCards.length, dragCenterOffset]
     );
 
     const prevCard = () => {
@@ -513,7 +550,6 @@ export default function PokeGameDeckViewer() {
         if (uniqueDeckCards.length === 0) return;
         setCurrentIdx((prev) => wrapIndex(prev + 1, uniqueDeckCards.length));
     };
-    const dragProgress = dragOffsetPx / CAROUSEL_STEP_PX;
 
     const onCarouselPointerDown = (e) => {
         if (uniqueDeckCards.length <= 1) return;
@@ -592,7 +628,15 @@ export default function PokeGameDeckViewer() {
         return (
             <div className="min-h-[90vh] w-full flex items-center justify-center p-6" style={bgStyle}>
                 <div className="rounded-3xl bg-white/78 backdrop-blur-xl border border-white/80 px-8 py-6 shadow-2xl">
-                    <div className="text-2xl font-extrabold text-slate-900 mb-4">Nie udało się wczytać talii</div>
+                    <div className="text-2xl font-extrabold text-slate-900 mb-4">
+                        Nie udało się wczytać talii
+                    </div>
+
+                    {loadError && (
+                        <div className="mb-4 rounded-2xl bg-red-50 border border-red-200 px-4 py-3 text-sm font-semibold text-red-700">
+                            {loadError}
+                        </div>
+                    )}
                     <button
                         type="button"
                         onClick={handleBack}
@@ -636,6 +680,15 @@ export default function PokeGameDeckViewer() {
             <div className="w-full max-w-[1560px] mx-auto rounded-[34px] bg-white/42 backdrop-blur-xl border border-white/70 shadow-[0_20px_60px_rgba(0,0,0,0.28)] px-4 py-4 md:px-8 md:py-6">
                 {/* Top bar */}
                 <div className="flex items-center gap-4 md:gap-8">
+                    {isOfflineDeck && (
+                        <div className="mt-4 rounded-2xl bg-amber-50/92 border border-amber-200 px-5 py-3 shadow text-amber-900">
+                            <div className="font-extrabold">Tryb offline</div>
+                            <div className="text-sm mt-1">
+                                Ta talia została wczytana z lokalnego snapshotu offline. Możesz ją przeglądać,
+                                obracać karuzelę i czytać dane kart, ale zmiany decka wymagają uruchomionego backendu.
+                            </div>
+                        </div>
+                    )}
                     <button
                         type="button"
                         onClick={handleBack}
@@ -662,11 +715,12 @@ export default function PokeGameDeckViewer() {
 
                 {/* Main content */}
                 <div
-                    className="mt-6 grid grid-cols-1 xl:grid-cols-[430px_minmax(0,1fr)] gap-8 items-stretch"
-                    style={{ minHeight: MAIN_SECTION_HEIGHT }}
+                    className="mt-6 grid grid-cols-1 xl:grid-cols-[430px_minmax(0,1fr)] gap-8 items-stretch overflow-hidden"
+                    style={{height: MAIN_SECTION_HEIGHT}}
                 >
                     {/* Left - duża karta */}
-                    <div className="rounded-[30px] bg-white/64 backdrop-blur-xl border border-white/75 shadow-xl p-5 h-full min-h-0 flex flex-col">
+                    <div
+                        className="rounded-[30px] bg-white/64 backdrop-blur-xl border border-white/75 shadow-xl p-5 md:p-6 h-full min-h-0 overflow-hidden flex flex-col">
                         <div className="w-full flex items-center justify-between mb-4 shrink-0">
                             <div className="text-sm font-semibold text-slate-800">
                                 Karta {wrapIndex(currentIdx, uniqueDeckCards.length) + 1} z {uniqueDeckCards.length}
@@ -678,9 +732,11 @@ export default function PokeGameDeckViewer() {
                         </div>
 
                         <div className="flex-1 min-h-0 flex items-center justify-center">
-                            <div className="w-full max-w-[320px] rounded-[24px] bg-white/92 border border-white/85 p-3 shadow-xl">
-                                <img
-                                    src={activeCard?.imageUrlLarge || activeCard?.imageUrlSmall}
+                            <div
+                                className="w-full max-w-[320px] rounded-[24px] bg-white/92 border border-white/85 p-3 shadow-xl">
+                                <CardImage
+                                    card={activeCard}
+                                    size="large"
                                     alt={getCardDisplayName(activeCard)}
                                     className="w-full h-auto object-contain rounded-[18px]"
                                     draggable={false}
@@ -690,7 +746,7 @@ export default function PokeGameDeckViewer() {
 
                         <div
                             className="mt-5 w-full rounded-2xl bg-white/78 backdrop-blur-md border border-white/80 px-4 py-3 shadow shrink-0"
-                            style={{ minHeight: LEFT_META_BOX_HEIGHT }}
+                            style={{minHeight: LEFT_META_BOX_HEIGHT}}
                         >
                             <div className="text-lg font-extrabold text-slate-900 text-center">
                                 {getCardDisplayName(activeCard)}
@@ -709,9 +765,33 @@ export default function PokeGameDeckViewer() {
                     </div>
 
                     {/* Right - info */}
-                    <div className="rounded-[30px] bg-white/64 backdrop-blur-xl border border-white/75 shadow-xl p-5 md:p-6 h-full min-h-0 flex flex-col">
-                        <div className="text-3xl font-extrabold text-slate-900 mb-5 shrink-0">
-                            {getCardDisplayName(activeCard)}
+                    <div
+                        className="relative overflow-hidden rounded-[30px] bg-slate-100/20 backdrop-blur-md border border-white/70 shadow-xl p-5 md:p-6 h-full min-h-0 flex flex-col"
+                    >
+                        <div
+                            className="relative overflow-hidden rounded-[30px] bg-slate-100/20 backdrop-blur-md border border-white/70 shadow-xl p-5 md:p-6 h-full min-h-0 flex flex-col"
+                        >
+                            <div
+                                className="absolute inset-0 bg-gradient-to-br from-white/14 via-slate-200/10 to-slate-500/10 pointer-events-none"/>
+
+                            <div className="relative z-10 text-3xl font-extrabold text-slate-900 mb-5 shrink-0">
+                                {getCardDisplayName(activeCard)}
+                            </div>
+
+                            <div
+                                className="relative z-10 grid grid-cols-1 gap-5 flex-1 min-h-0 overflow-y-auto pr-2"
+                                style={{scrollbarGutter: "stable"}}
+                            >
+                                {infoSections.map((section) => (
+                                    <InfoBlock
+                                        key={section.key}
+                                        title={section.title}
+                                        speakerText={section.speakerText}
+                                    >
+                                        {section.content}
+                                    </InfoBlock>
+                                ))}
+                            </div>
                         </div>
 
                         <div className="grid grid-cols-1 gap-5 flex-1 min-h-0 overflow-y-auto pr-2">
@@ -731,7 +811,7 @@ export default function PokeGameDeckViewer() {
                 {/* Bottom carousel */}
                 <div
                     className="mt-8 rounded-[30px] bg-white/58 backdrop-blur-xl border border-white/75 px-4 py-6 shadow-xl flex-shrink-0"
-                    style={{ minHeight: CAROUSEL_PANEL_HEIGHT }}
+                    style={{minHeight: CAROUSEL_PANEL_HEIGHT}}
                 >
                     <div className="flex items-center justify-between gap-4 h-full">
                         <button
@@ -797,8 +877,9 @@ export default function PokeGameDeckViewer() {
                                                         : "bg-white/90 border-white/70"
                                                 }`}
                                             >
-                                                <img
-                                                    src={card?.imageUrlSmall || card?.imageUrlLarge}
+                                                <CardImage
+                                                    card={card}
+                                                    size="small"
                                                     alt={getCardDisplayName(card)}
                                                     className="w-[140px] h-[196px] object-contain"
                                                     draggable={false}

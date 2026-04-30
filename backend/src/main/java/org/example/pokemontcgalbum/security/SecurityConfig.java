@@ -65,6 +65,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/pokedex/**").permitAll()
                         .requestMatchers("/api/cards/**").permitAll()
+                        .requestMatchers("/api/card-images/**").permitAll()
                         .requestMatchers("/api/user-cards/**").authenticated()
                         .requestMatchers("/api/user-decks/**").authenticated()
                         .requestMatchers("/api/user/**").hasAnyRole("USER", "DEV")

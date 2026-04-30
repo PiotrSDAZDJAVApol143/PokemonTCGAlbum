@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import api from "../api";
 import { useNavigate } from "react-router-dom";
+import CardImage from "../components/CardImage.jsx";
 
 export default function AlbumUserSetCardsView({
                                                   setId,
@@ -78,11 +79,11 @@ export default function AlbumUserSetCardsView({
                             })}
                             style={{ minHeight: 260 }}
                         >
-                            <img
-                                src={userCard.imageUrlSmall || userCard.officialArtworkUrl}
-                                alt={userCard.cardName || "Brak"}
-                                className="w-[184px] h-[260px] object-contain drop-shadow-lg"
-                                style={{ background: "#fff", borderRadius: "12px" }}
+                            <CardImage
+                                card={userCard}
+                                size="small"
+                                alt={userCard.cardName || userCard.name}
+                                className="w-[220px] h-[310px] object-contain drop-shadow-lg"
                             />
                             <div className="font-bold mt-2">{userCard.cardName}</div>
                             {userCard.quantity > 1 && (

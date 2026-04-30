@@ -1,9 +1,30 @@
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
-import axios from "axios";
-import api from "../api";
+import { getEditableDecks } from "../services/deckService.js";
+import {
+    getCardById,
+    searchPublicCards,
+} from "../services/cardService.js";
+import {
+    addCardInstance,
+    assignInstanceToDeck,
+    assignManyInstancesToDeck,
+    deleteCardInstance,
+    getUserCardDetails,
+    removeInstanceFromDeck,
+    removeManyInstancesFromDeck,
+    searchUserCards,
+} from "../services/userCardService.js";
+import {
+    recalcCardRating,
+    saveAbilityRating as saveAbilityRatingRequest,
+    saveAttackRating as saveAttackRatingRequest,
+    saveOverallRating as saveOverallRatingRequest,
+    saveRuleRating as saveRuleRatingRequest,
+} from "../services/devCardService.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import DeckSelectModal from "../components/DeckSelectModal";
+import CardImage from "../components/CardImage.jsx";
 
 // JWT helpers
 function parseJwt(token) {
@@ -229,6 +250,18 @@ function BulkDeckAssign({
     );
 }
 
+function buildEditRatingsFromCard(card) {
+    const atkVals = (card?.attacks || []).map((a) => a?.defRating ?? "");
+    const abVals = (card?.abilities || []).map((a) => a?.rating ?? "");
+    const ruleVals = (card?.rules || []).map((r) => r?.rating ?? "");
+
+    return {
+        overall: card?.overallRating ?? "",
+        attacks: atkVals,
+        abilities: abVals,
+        rules: ruleVals,
+    };
+}
 export default function CardDetails() {
     const { cardId } = useParams();
     const location = useLocation();
@@ -268,6 +301,7 @@ export default function CardDetails() {
 
     const [cards, setCards] = useState([]);
     const [card, setCard] = useState(null);
+    const [cardLoadError, setCardLoadError] = useState("");
     const [totalPages, setTotalPages] = useState(1);
 
     const [instances, setInstances] = useState([]);
@@ -288,70 +322,70 @@ export default function CardDetails() {
             return;
         }
 
-        let url;
-        const params = { page, size };
+        let cancelled = false;
 
-        if (isUserView) {
-            url = "/user-cards/search";
-            if (name) params.name = name;
-            if (setId) params.setId = setId;
-        } else {
-            url = "/api/cards/search";
-            if (name) params.name = name;
-            if (setId) params.setId = setId;
-        }
+        const loadCards = async () => {
+            try {
+                const result = isUserView
+                    ? await searchUserCards({ page, size, name, setId })
+                    : await searchPublicCards({ page, size, name, setId });
 
-        api.get(url, { params })
-            .then((res) => {
-                const content = res.data?.content ?? [];
-                setCards(
-                    content.map((c) => ({
-                        ...c,
-                        id: c.id || c.cardId,
-                        name: c.name || c.cardName,
-                    }))
-                );
-                setTotalPages(res.data?.totalPages ?? 1);
-            })
-            .catch(() => {
+                if (cancelled) return;
+
+                setCards(result.content || []);
+                setTotalPages(result.totalPages || 1);
+            } catch {
+                if (cancelled) return;
+
                 setCards([]);
                 setTotalPages(1);
-            });
+            }
+        };
+
+        loadCards();
+
+        return () => {
+            cancelled = true;
+        };
     }, [page, size, name, setId, view, isUserView, deckCardIds]);
 
     useEffect(() => {
         if (!cardId) return;
 
-        axios.get(`/api/cards/${cardId}`).then((res) => {
-            setCard(res.data);
+        let cancelled = false;
 
-            const atkVals = (res.data.attacks || []).map((a) => a?.defRating ?? "");
-            const abVals = (res.data.abilities || []).map((a) => a?.rating ?? "");
-            const ruleVals = (res.data.rules || []).map((r) => r?.rating ?? "");
+        setCard(null);
+        setCardLoadError("");
 
-            setEditRatings({
-                overall: res.data.overallRating ?? "",
-                attacks: atkVals,
-                abilities: abVals,
-                rules: ruleVals,
+        getCardById(cardId)
+            .then((loadedCard) => {
+                if (cancelled) return;
+
+                setCard(loadedCard);
+                setEditRatings(buildEditRatingsFromCard(loadedCard));
+            })
+            .catch((e) => {
+                if (cancelled) return;
+
+                setCard(null);
+                setCardLoadError(
+                    e?.response?.data?.message ||
+                    e?.response?.data ||
+                    e?.message ||
+                    "Nie udało się wczytać karty."
+                );
             });
-        });
+
+        return () => {
+            cancelled = true;
+        };
     }, [cardId]);
 
     const refreshCard = async () => {
-        const res = await axios.get(`/api/cards/${cardId}`);
-        setCard(res.data);
+        const loadedCard = await getCardById(cardId);
 
-        const atkVals = (res.data.attacks || []).map((a) => a?.defRating ?? "");
-        const abVals = (res.data.abilities || []).map((a) => a?.rating ?? "");
-        const ruleVals = (res.data.rules || []).map((r) => r?.rating ?? "");
-
-        setEditRatings({
-            overall: res.data.overallRating ?? "",
-            attacks: atkVals,
-            abilities: abVals,
-            rules: ruleVals,
-        });
+        setCard(loadedCard);
+        setEditRatings(buildEditRatingsFromCard(loadedCard));
     };
 
     useEffect(() => {
@@ -360,84 +394,91 @@ export default function CardDetails() {
             return;
         }
 
-        api.get(`/user-cards/details/${cardId}`).then((res) => {
-            setInstances(res.data.instances || []);
-            setCurrentIdx(0);
-        });
+        let cancelled = false;
+
+        getUserCardDetails(cardId)
+            .then((details) => {
+                if (cancelled) return;
+
+                setInstances(details.instances || []);
+                setCurrentIdx(0);
+            })
+            .catch(() => {
+                if (cancelled) return;
+
+                setInstances([]);
+                setCurrentIdx(0);
+            });
+
+        return () => {
+            cancelled = true;
+        };
     }, [cardId, isUserView]);
 
-    useEffect(() => {
-        setCurrentIdx(0);
-    }, [cardId]);
-
     const handleAdd = async () => {
-        await api.post("/user-cards/add-instance", { cardId });
-        const res = await api.get(`/user-cards/details/${cardId}`);
-        setInstances(res.data.instances || []);
-        setCurrentIdx(res.data.instances.length - 1);
+        const details = await addCardInstance(cardId);
+        const nextInstances = details.instances || [];
+
+        setInstances(nextInstances);
+        setCurrentIdx(Math.max(0, nextInstances.length - 1));
     };
 
     const handleRemove = async () => {
         if (!instances.length) return;
+
         const instToRemove = instances[instances.length - 1];
-        await api.delete(`/user-cards/instance/${instToRemove.id}`);
-        const res = await api.get(`/user-cards/details/${cardId}`);
-        setInstances(res.data.instances || []);
-        setCurrentIdx((i) => Math.max(0, i - 1));
+
+        await deleteCardInstance(instToRemove.id);
+
+        const details = await getUserCardDetails(cardId);
+        const nextInstances = details.instances || [];
+
+        setInstances(nextInstances);
+        setCurrentIdx((i) => Math.max(0, Math.min(i, nextInstances.length - 1)));
     };
 
     const fetchDecks = async () => {
-        const res = await api.get("/user/decks");
-
-        const raw = Array.isArray(res.data)
-            ? res.data
-            : res.data.decks || res.data.content || [];
-
-        return raw
-            .filter((d) => !d.readOnly)
-            .map((d) => ({ id: d.id, name: d.name }));
+        const decks = await getEditableDecks();
+        return decks.map((d) => ({ id: d.id, name: d.name }));
     };
 
-    const handleAssignMany = async (ids, deckId) => {
-        for (const id of ids) {
-            await api.post(`/user-cards/instance/${id}/assign-to-deck`, { deckId });
-        }
-        const res = await api.get(`/user-cards/details/${cardId}`);
-        setInstances(res.data.instances || []);
+    const handleAssignMany = async (ids, targetDeckId) => {
+        await assignManyInstancesToDeck(ids, targetDeckId);
+
+        const details = await getUserCardDetails(cardId);
+        setInstances(details.instances || []);
     };
 
     const handleMoveMany = async (ids, toDeckId) => {
-        for (const id of ids) {
-            await api.post(`/user-cards/instance/${id}/assign-to-deck`, {
-                deckId: toDeckId,
-            });
-        }
-        const res = await api.get(`/user-cards/details/${cardId}`);
-        setInstances(res.data.instances || []);
+        await assignManyInstancesToDeck(ids, toDeckId);
+
+        const details = await getUserCardDetails(cardId);
+        setInstances(details.instances || []);
     };
 
     const handleRemoveMany = async (ids) => {
-        for (const id of ids) {
-            await api.post(`/user-cards/instance/${id}/remove-from-deck`);
-        }
-        const res = await api.get(`/user-cards/details/${cardId}`);
-        setInstances(res.data.instances || []);
+        await removeManyInstancesFromDeck(ids);
+
+        const details = await getUserCardDetails(cardId);
+        setInstances(details.instances || []);
     };
 
     const handleAssignToDeck = async (targetDeckId) => {
         if (!deckModalInstId) return;
-        await api.post(`/user-cards/instance/${deckModalInstId}/assign-to-deck`, {
-            deckId: targetDeckId,
-        });
-        const res = await api.get(`/user-cards/details/${cardId}`);
-        setInstances(res.data.instances || []);
+
+        await assignInstanceToDeck(deckModalInstId, targetDeckId);
+
+        const details = await getUserCardDetails(cardId);
+
+        setInstances(details.instances || []);
         setDeckModalInstId(null);
     };
 
     const handleRemoveFromDeck = async (instanceId) => {
-        await api.post(`/user-cards/instance/${instanceId}/remove-from-deck`);
-        const res = await api.get(`/user-cards/details/${cardId}`);
-        setInstances(res.data.instances || []);
+        await removeInstanceFromDeck(instanceId);
+
+        const details = await getUserCardDetails(cardId);
+        setInstances(details.instances || []);
     };
 
     const handleMoveToOtherDeck = (instanceId) => {
@@ -466,7 +507,9 @@ export default function CardDetails() {
     };
 
     const saveOverallRating = () => {
-        api.patch(`/dev/${cardId}/rating`, { rating: parseInt(editRatings.overall, 10) })
+        const rating = parseInt(editRatings.overall, 10);
+
+        saveOverallRatingRequest(cardId, rating)
             .then(async () => {
                 await refreshCard();
                 alert("Siła karty zapisana");
@@ -475,9 +518,9 @@ export default function CardDetails() {
     };
 
     const saveAttackRating = (idx, defId) => {
-        api.patch(`/dev/attack-defs/${defId}/rating`, {
-            rating: parseInt(editRatings.attacks[idx], 10),
-        })
+        const rating = parseInt(editRatings.attacks[idx], 10);
+
+        saveAttackRatingRequest(defId, rating)
             .then(async () => {
                 await refreshCard();
                 alert("Ocena ataku zapisana");
@@ -492,12 +535,13 @@ export default function CardDetails() {
             alert("Brak defId ability");
             return;
         }
+
         if (Number.isNaN(val)) {
             alert("Podaj liczbę 1–10");
             return;
         }
 
-        api.patch(`/dev/ability-defs/${defId}/rating`, { rating: val })
+        saveAbilityRatingRequest(defId, val)
             .then(async () => {
                 await refreshCard();
                 alert("Ocena ability zapisana");
@@ -512,12 +556,13 @@ export default function CardDetails() {
             alert("Brak ruleId");
             return;
         }
+
         if (Number.isNaN(val)) {
             alert("Podaj liczbę (może być ujemna)");
             return;
         }
 
-        api.patch(`/dev/rule/${ruleId}/rating`, { rating: val })
+        saveRuleRatingRequest(ruleId, val)
             .then(async () => {
                 await refreshCard();
                 alert("Ocena rule zapisana");
@@ -545,6 +590,7 @@ export default function CardDetails() {
 
         if (idxOnPage > 0) {
             const prevCard = cards[idxOnPage - 1];
+
             navigate(`/card/${prevCard.id}`, {
                 state: { page, size, name, setId, idxOnPage: idxOnPage - 1, view },
             });
@@ -552,13 +598,10 @@ export default function CardDetails() {
         }
 
         if (page > 0) {
-            const url = isUserView ? "/user-cards/search" : "/api/cards/search";
-            const params = { page: page - 1, size };
-            if (name) params.name = name;
-            if (setId) params.setId = setId;
+            const loadPrevPage = isUserView ? searchUserCards : searchPublicCards;
 
-            api.get(url, { params }).then((res) => {
-                const content = res.data?.content ?? [];
+            loadPrevPage({ page: page - 1, size, name, setId }).then((result) => {
+                const content = result.content || [];
                 const lastIdx = Math.max(0, content.length - 1);
                 const prevCard = content[lastIdx];
                 const prevId = prevCard?.id || prevCard?.cardId;
@@ -596,6 +639,7 @@ export default function CardDetails() {
 
         if (idxOnPage < cards.length - 1) {
             const nextCard = cards[idxOnPage + 1];
+
             navigate(`/card/${nextCard.id}`, {
                 state: { page, size, name, setId, idxOnPage: idxOnPage + 1, view },
             });
@@ -603,13 +647,10 @@ export default function CardDetails() {
         }
 
         if (page < totalPages - 1) {
-            const url = isUserView ? "/user-cards/search" : "/api/cards/search";
-            const params = { page: page + 1, size };
-            if (name) params.name = name;
-            if (setId) params.setId = setId;
+            const loadNextPage = isUserView ? searchUserCards : searchPublicCards;
 
-            api.get(url, { params }).then((res) => {
-                const content = res.data?.content ?? [];
+            loadNextPage({ page: page + 1, size, name, setId }).then((result) => {
+                const content = result.content || [];
                 const first = content[0];
                 const nextId = first?.id || first?.cardId;
 
@@ -629,7 +670,23 @@ export default function CardDetails() {
         }
     };
 
-    if (!card) return <div className="p-10">Ładowanie...</div>;
+    if (!card) {
+        return (
+            <div className="p-10">
+                {cardLoadError ? (
+                    <div className="p-4 rounded bg-red-50 border border-red-200 text-red-700 font-semibold">
+                        {cardLoadError}
+                    </div>
+                ) : (
+                    "Ładowanie..."
+                )}
+            </div>
+        );
+    }
+
+    const isOfflineCard = !!card.offlineSnapshot;
+    const canEditUserCollection = isUserView && !isOfflineCard;
+    const canUseDevTools = isDevView && !isOfflineCard;
 
     const prevDisabled = isDeckLikeView
         ? idxInDeck <= 0
@@ -661,13 +718,14 @@ export default function CardDetails() {
 
                 <div className="flex items-center justify-center" style={{ width: "40%" }}>
                     <div className="flex flex-col items-center">
-                        <img
-                            src={card.imageUrlLarge || card.imageUrlSmall}
+                        <CardImage
+                            card={card}
+                            size="large"
                             alt={card.name}
                             className="w-[440px] h-[615px] object-contain rounded-lg shadow-lg"
                         />
 
-                        {isUserView && (
+                        {canEditUserCollection && (
                             <div className="flex flex-col items-center gap-2 mt-4">
                                 <div className="flex items-center gap-4 border rounded-2xl px-6 py-2 bg-white shadow-lg">
                                     <button
@@ -713,7 +771,7 @@ export default function CardDetails() {
                             </div>
                         )}
 
-                        {isUserView && (
+                        {canEditUserCollection && (
                             <div className="mt-4">
                                 <b>Twoja ocena karty:</b>
                                 <div>[★★★★★]</div>
@@ -726,15 +784,26 @@ export default function CardDetails() {
                     className="flex flex-col justify-start overflow-y-auto min-h-0 pr-4"
                     style={{ width: "50%" }}
                 >
+                    {isOfflineCard && (
+                        <div className="mt-12 mb-4 p-4 rounded bg-amber-50 border border-amber-200 shadow">
+                            <div className="font-bold text-lg">Tryb offline</div>
+                            <div className="mt-2 text-sm">
+                                Ta karta została wczytana z lokalnego snapshotu offline.
+                                Możesz ją przeglądać, ale dodawanie kopii, przenoszenie między deckami
+                                i zapisy DEV wymagają uruchomionego backendu.
+                            </div>
+                        </div>
+                    )}
                     {isSharedDeckView && (
-                        <div className="mt-12 mb-4 p-4 rounded bg-blue-50 border border-blue-200 shadow">
+                        <div
+                            className={`${isOfflineCard ? "mt-2" : "mt-12"} mb-4 p-4 rounded bg-blue-50 border border-blue-200 shadow`}>
                             <div className="font-bold text-lg">Tryb widmowy / read-only</div>
                             <div className="mt-2 text-sm">
                                 To jest współdzielona talia użytkownika{" "}
                                 <b>{ownerUsername || "innego gracza"}</b>.
-                                <br />
+                                <br/>
                                 Deck: <b>{deckName || "-"}</b>
-                                <br />
+                                <br/>
                                 Nie możesz tutaj dodawać, usuwać ani przenosić kart między taliami.
                             </div>
                         </div>
@@ -782,11 +851,11 @@ export default function CardDetails() {
                         </a>
                     </div>
 
-                    {isDevView && (
+                    {canUseDevTools && (
                         <button
                             className="ml-2 px-3 py-1 rounded bg-indigo-600 text-white"
                             onClick={async () => {
-                                await api.patch(`/dev/${cardId}/recalc-rating`);
+                                await recalcCardRating(cardId);
                                 await refreshCard();
                             }}
                         >
@@ -832,7 +901,7 @@ export default function CardDetails() {
                                     </span>
                                     <div>{ability.descriptionPl || ability.description}</div>
 
-                                    {isDevView && (
+                                    {canUseDevTools && (
                                         <span style={{ marginLeft: "2em" }}>
                                             Ocena Administratora:&nbsp;
                                             <input
@@ -874,7 +943,7 @@ export default function CardDetails() {
                                     {at.damage && <> dmg {at.damage}</>}
                                     <div>{at.descriptionPl || at.description}</div>
 
-                                    {isDevView && (
+                                    {canUseDevTools && (
                                         <span style={{ marginLeft: "2em" }}>
                                             Ocena Administratora:&nbsp;
                                             <input
@@ -912,7 +981,7 @@ export default function CardDetails() {
                                 <div key={rule.id || idx} className="mb-3">
                                     <span>{rule.textPl || rule.text}</span>
 
-                                    {isDevView && (
+                                    {canUseDevTools && (
                                         <span style={{ marginLeft: "2em" }}>
                                             Ocena Administratora:&nbsp;
                                             <input
@@ -941,7 +1010,7 @@ export default function CardDetails() {
                         </div>
                     )}
 
-                    {isUserView && (
+                    {canEditUserCollection && (
                         <div className="mt-6">
                             {instances.length >= 10 ? (
                                 <BulkDeckAssign
@@ -1010,7 +1079,7 @@ export default function CardDetails() {
                         </div>
                     )}
 
-                    {isDevView && (
+                    {canUseDevTools && (
                         <div className="mt-6 p-4 rounded bg-orange-100 shadow">
                             <label className="block mb-2 font-bold">
                                 Ocena ogólna karty (admin):

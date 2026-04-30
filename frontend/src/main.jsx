@@ -16,6 +16,7 @@ import CardDetails from './pages/CardDetails';
 import AlbumUserSetListView from "./pages/AlbumUserSetListView.jsx";
 import AlbumUserSetCardsView from "./pages/AlbumUserSetCardsView.jsx";
 import PokeGameDeckViewer from "./pages/PokeGameDeckViewer";
+import OfflineManager from "./pages/OfflineManager.jsx";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
     <BrowserRouter>
@@ -33,6 +34,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
                     <Route path="poke-game" element={<PokeGame/>}/>
                     <Route path="poke-game/deck/:deckId" element={<PokeGameDeckViewer />} />
                     <Route path="/account" element={<Account />} />
+                    <Route path="/offline" element={<OfflineManager />} />
                     <Route path="login" element={<Login/>}/>
                 </Route>
             </Routes>

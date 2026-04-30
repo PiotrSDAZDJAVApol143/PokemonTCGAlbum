@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import api from "../api";
 import { useNavigate } from "react-router-dom";
 import UserAddCardPanel from "../components/UserAddCardPanel";
+import CardImage from "../components/CardImage.jsx";
 
 /** Uniwersalny suwak krokowy (klik + drag) */
 function Slider({
@@ -324,11 +325,11 @@ export default function AlbumUserAllView({ goBack, page = 0, setPage, search, se
                         }
                         style={{ minHeight: 260 }}
                     >
-                        <img
-                            src={userCard.imageUrlSmall || userCard.officialArtworkUrl}
-                            alt={userCard.cardName}
+                        <CardImage
+                            card={userCard}
+                            size="small"
+                            alt={userCard.cardName || userCard.name}
                             className="w-[220px] h-[310px] object-contain drop-shadow-lg"
-                            style={{ background: "#fff", borderRadius: "12px" }}
                         />
 
                         <div className="w-[220px] mt-3 px-3 py-2 rounded-2xl bg-white/30 backdrop-blur-md border border-white/40 shadow-lg">

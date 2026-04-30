@@ -11,4 +11,5 @@ public class CardSetDto {
     private String symbolUrl;
     private String releaseDate;
     private Integer printedTotal;
+    private Integer total;
 }

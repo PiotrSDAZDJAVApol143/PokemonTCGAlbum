@@ -2,10 +2,23 @@ import { useState, useEffect, useMemo } from "react";
 import NewDeckModal from "../components/NewDeckModal";
 import DeckEditModal from "../components/DeckEditModal";
 import ExportDeckModal from "../components/ExportDeckModal";
-import api from "../api";
+import ImportOfflineDeckModal from "../components/ImportOfflineDeckModal.jsx";
+import {
+    getDecks,
+    createDeck,
+    updateDeck,
+    deleteDeck,
+    registerDeckWin,
+    registerDeckLoss,
+    resetDeckScore,
+} from "../services/deckService.js";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAutoDeckImage } from "../components/useAutoDeckImage";
-
+import CardImage from "../components/CardImage.jsx";
+import { preloadCardImages } from "../services/imageCacheService.js";
+import { downloadDeckOfflinePackage } from "../services/deckOfflinePackageService.js";
+import { preloadCardImagesToBrowserCache } from "../services/browserImageCacheService.js";
+import { useAuth } from "../context/AuthContext.jsx";
 
 // =========================
 // Logos
@@ -134,11 +147,19 @@ function DeckTile({ deck, selected, onClick, onDoubleClick, cardsCount, complete
                 {deck.favorite && "★"}
             </div>
 
-            {deck.shared && (
-                <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-black/65 text-white text-[10px] font-bold">
-                    Shared
-                </div>
-            )}
+            <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
+                {deck.shared && (
+                    <div className="px-2 py-0.5 rounded-full bg-black/65 text-white text-[10px] font-bold">
+                        Shared
+                    </div>
+                )}
+
+                {deck.offlineSnapshot && (
+                    <div className="px-2 py-0.5 rounded-full bg-amber-500/90 text-white text-[10px] font-bold">
+                        Offline
+                    </div>
+                )}
+            </div>
 
             {!complete && <div className="absolute bottom-1 right-2 text-red-500 text-lg">⚠️</div>}
 
@@ -201,6 +222,10 @@ export default function Deck() {
     const [showEdit, setShowEdit] = useState(false);
     const [showCreate, setShowCreate] = useState(false);
     const [showExport, setShowExport] = useState(false);
+    const [showImportOfflinePackage, setShowImportOfflinePackage] = useState(false);
+    const { isOnline, backendUnavailable, offlineAuthMode } = useAuth();
+
+    const backendOfflineMode = !isOnline || backendUnavailable || offlineAuthMode;
 
     const navigate = useNavigate();
     const location = useLocation();
@@ -225,15 +250,27 @@ export default function Deck() {
 
     // Wynik zapis do backendu
     const [savingResult, setSavingResult] = useState(false);
+    const [preloadingImages, setPreloadingImages] = useState(false);
+    const [preloadImagesMsg, setPreloadImagesMsg] = useState("");
+    const [exportingOfflinePackage, setExportingOfflinePackage] = useState(false);
 
     // ====== Fetch decks
     useEffect(() => {
-        api
-            .get("/user/decks")
-            .then((res) =>
-                setDecks(Array.isArray(res.data) ? res.data : res.data?.decks || res.data?.content || [])
-            )
-            .catch(() => setDecks([]));
+        let cancelled = false;
+
+        getDecks()
+            .then((loadedDecks) => {
+                if (cancelled) return;
+                setDecks(loadedDecks);
+            })
+            .catch(() => {
+                if (cancelled) return;
+                setDecks([]);
+            });
+
+        return () => {
+            cancelled = true;
+        };
     }, []);
 
     useEffect(() => {
@@ -279,6 +316,35 @@ export default function Deck() {
     const isSharedDeck = !!safeSelectedDeck?.shared;
     const isReadOnlyDeck = !!safeSelectedDeck?.readOnly;
     const deckOwnerLabel = safeSelectedDeck?.ownerUsername || "Ty";
+
+    const isOfflineSnapshotDeck = !!safeSelectedDeck?.offlineSnapshot;
+    const isOfflineReadonlyMode = backendOfflineMode || isOfflineSnapshotDeck;
+
+    const deckWriteBlocked = isReadOnlyDeck || isOfflineReadonlyMode;
+
+    function showOfflineReadonlyAlert(actionName = "Ta operacja") {
+        alert(
+            `${actionName} wymaga połączenia z backendem. ` +
+            `W trybie offline / snapshot deck jest tylko do podglądu.`
+        );
+    }
+
+    useEffect(() => {
+        if (!isOfflineReadonlyMode) return;
+
+        setShowCreate(false);
+        setShowEdit(false);
+        setShowExport(false);
+    }, [isOfflineReadonlyMode]);
+
+    function ensureOnlineWriteAllowed(actionName = "Ta operacja") {
+        if (isOfflineReadonlyMode) {
+            showOfflineReadonlyAlert(actionName);
+            return false;
+        }
+
+        return true;
+    }
 
     // ===== Metryki
     function getTotalCardsInDeck(deck) {
@@ -375,6 +441,9 @@ export default function Deck() {
     }, [deckUniqueCardsAll, thumbFilter]);
 
     const deckCardIds = deckUniqueCardsFiltered.map(({ card }) => card.id);
+    const allDeckCardIds = deckUniqueCardsAll
+        .map(({ card }) => card?.id)
+        .filter(Boolean);
 
     const wins = safeSelectedDeck.wins ?? 0;
     const losses = safeSelectedDeck.losses ?? 0;
@@ -389,10 +458,18 @@ export default function Deck() {
 
     // ===== CRUD: create/edit/delete
     const handleCreateDeck = async ({ name, logoUrl, baseEnergy, secondaryEnergy }) => {
+        if (!ensureOnlineWriteAllowed("Tworzenie decka")) return;
+
         try {
-            const res = await api.post(`/user/decks/add`, { name, logoUrl, baseEnergy, secondaryEnergy });
-            const newDeck = res.data;
+            const newDeck = await createDeck({
+                name,
+                logoUrl,
+                baseEnergy,
+                secondaryEnergy,
+            });
+
             setDecks((ds) => [...ds, newDeck]);
+            setSelectedDeckId(newDeck.id);
             setShowCreate(false);
         } catch (e) {
             console.error("Błąd podczas dodawania talii:", e);
@@ -401,29 +478,148 @@ export default function Deck() {
     };
 
     const handleEditSave = async ({ name, logoUrl, baseEnergy, secondaryEnergy }) => {
+        if (!ensureOnlineWriteAllowed("Edycja decka")) return;
+
         const deck = decks.find((d) => d.id === selectedDeckId);
         if (!deck) return;
 
-        const updatedDeck = await api
-            .put(`/user/decks/${deck.id}`, { name, logoUrl, baseEnergy, secondaryEnergy })
-            .then((r) => r.data);
+        try {
+            const updatedDeck = await updateDeck(deck.id, {
+                name,
+                logoUrl,
+                baseEnergy,
+                secondaryEnergy,
+            });
 
-        setDecks((ds) => ds.map((d) => (d.id === deck.id ? updatedDeck : d)));
-        setShowEdit(false);
+            setDecks((ds) => ds.map((d) => (d.id === deck.id ? updatedDeck : d)));
+            setShowEdit(false);
+        } catch (e) {
+            console.error("Błąd podczas edycji talii:", e);
+            alert("Błąd podczas edycji talii: " + (e?.response?.data?.message || e.message));
+        }
     };
 
     const handleDelete = async () => {
-        if (!selectedDeckId || isReadOnlyDeck) return;
-        if (window.confirm("Na pewno usunąć?")) {
-            await api.delete(`/user/decks/${selectedDeckId}`);
+        if (!selectedDeckId || deckWriteBlocked) return;
+
+        if (!ensureOnlineWriteAllowed("Usuwanie decka")) return;
+
+        if (!window.confirm("Na pewno usunąć?")) return;
+
+        try {
+            await deleteDeck(selectedDeckId);
+
             setDecks((ds) => ds.filter((d) => d.id !== selectedDeckId));
             setSelectedDeckId(null);
+        } catch (e) {
+            console.error("Błąd podczas usuwania talii:", e);
+            alert("Błąd podczas usuwania talii: " + (e?.response?.data?.message || e.message));
         }
     };
 
     const handleExportSuccess = (targetUsername) => {
         alert(`Deck został udostępniony użytkownikowi ${targetUsername}.`);
         setShowExport(false);
+    };
+    const handleImportOfflinePackageSuccess = (result) => {
+        const importedDeck = result?.deck;
+
+        if (importedDeck?.id) {
+            setDecks((currentDecks) => {
+                const exists = currentDecks.some((deck) => deck.id === importedDeck.id);
+
+                if (exists) {
+                    return currentDecks.map((deck) =>
+                        deck.id === importedDeck.id ? importedDeck : deck
+                    );
+                }
+
+                return [...currentDecks, importedDeck];
+            });
+
+            setSelectedDeckId(importedDeck.id);
+        }
+
+        alert(result?.message || "Deck został zaimportowany.");
+        setShowImportOfflinePackage(false);
+    };
+    const handlePreloadDeckImages = async () => {
+        if (!ensureOnlineWriteAllowed("Pobieranie obrazów offline")) return;
+
+        if (!selectedDeckId) {
+            alert("Najpierw wybierz deck.");
+            return;
+        }
+
+        if (allDeckCardIds.length === 0) {
+            alert("Ten deck nie ma kart do pobrania.");
+            return;
+        }
+
+        try {
+            setPreloadingImages(true);
+            setPreloadImagesMsg("Pobieram obrazy kart do backend cache...");
+
+            const backendResult = await preloadCardImages(allDeckCardIds, {
+                small: true,
+                large: true,
+            });
+
+            setPreloadImagesMsg("Zapisuję obrazy także w cache przeglądarki...");
+
+            const browserResult = await preloadCardImagesToBrowserCache(allDeckCardIds, {
+                small: true,
+                large: true,
+            });
+
+            const cacheMb = backendResult?.cacheStats?.totalMb ?? 0;
+
+            setPreloadImagesMsg(
+                `Gotowe. Backend: ${backendResult.successImages}/${backendResult.requestedImages}. ` +
+                `Przeglądarka: ${browserResult.success}/${browserResult.requested}. ` +
+                `Błędy przeglądarki: ${browserResult.failed}. Cache backendu: ${cacheMb} MB.`
+            );
+        } catch (e) {
+            console.error("Błąd pobierania obrazów decka:", e);
+
+            setPreloadImagesMsg(
+                "Błąd pobierania obrazów: " +
+                (e?.response?.data?.message || e?.response?.data || e.message)
+            );
+        } finally {
+            setPreloadingImages(false);
+        }
+    };
+
+    const handleDownloadOfflinePackage = async () => {
+        if (!ensureOnlineWriteAllowed("Eksport paczki offline")) return;
+
+        if (!selectedDeckId) {
+            alert("Najpierw wybierz deck.");
+            return;
+        }
+
+        try {
+            setExportingOfflinePackage(true);
+            setPreloadImagesMsg("Tworzę paczkę offline ZIP...");
+
+            await downloadDeckOfflinePackage(
+                selectedDeckId,
+                safeSelectedDeck?.name || "deck"
+            );
+
+            setPreloadImagesMsg(
+                "Paczka offline została pobrana. Zawiera deck.json oraz obrazy kart."
+            );
+        } catch (e) {
+            console.error("Błąd eksportu paczki offline:", e);
+            setPreloadImagesMsg(
+                "Błąd eksportu paczki offline: " +
+                (e?.response?.data?.message || e?.response?.data || e.message)
+            );
+        } finally {
+            setExportingOfflinePackage(false);
+        }
     };
 
     // ===== Wyniki (win/loss/reset) – wymagają endpointów w backendzie
@@ -441,11 +637,14 @@ export default function Deck() {
 
     const handleWin = async () => {
         if (!ensureDeckSelectedOrWarn()) return;
+        if (!ensureOnlineWriteAllowed("Zapis wygranej")) return;
         if (savingResult) return;
 
         try {
             setSavingResult(true);
-            const updated = await api.post(`/user/decks/${selectedDeckId}/win`).then((r) => r.data);
+
+            const updated = await registerDeckWin(selectedDeckId);
+
             replaceDeckInState(updated);
         } catch (e) {
             console.error(e);
@@ -457,11 +656,14 @@ export default function Deck() {
 
     const handleLoss = async () => {
         if (!ensureDeckSelectedOrWarn()) return;
+        if (!ensureOnlineWriteAllowed("Zapis przegranej")) return;
         if (savingResult) return;
 
         try {
             setSavingResult(true);
-            const updated = await api.post(`/user/decks/${selectedDeckId}/loss`).then((r) => r.data);
+
+            const updated = await registerDeckLoss(selectedDeckId);
+
             replaceDeckInState(updated);
         } catch (e) {
             console.error(e);
@@ -473,6 +675,7 @@ export default function Deck() {
 
     const resetWinRatio = async () => {
         if (!ensureDeckSelectedOrWarn()) return;
+        if (!ensureOnlineWriteAllowed("Reset wyniku")) return;
         if (savingResult) return;
 
         const ok = window.confirm("Zresetować wynik tej talii? Ustawi wins=0 i losses=0.");
@@ -480,7 +683,9 @@ export default function Deck() {
 
         try {
             setSavingResult(true);
-            const updated = await api.post(`/user/decks/${selectedDeckId}/reset-score`).then((r) => r.data);
+
+            const updated = await resetDeckScore(selectedDeckId);
+
             replaceDeckInState(updated);
         } catch (e) {
             console.error(e);
@@ -526,8 +731,18 @@ export default function Deck() {
                                 {sortDir === "ASC" ? "↑ Rosnąco" : "↓ Malejąco"}
                             </button>
 
-                            <div className="text-xs app-text-secondary ml-auto hidden lg:block">
-                                Tip: kliknij strzałkę, aby odwrócić sortowanie
+                            <div className="ml-auto flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    className="deck-btn-muted rounded px-3 py-2 text-sm"
+                                    onClick={() => navigate("/offline")}
+                                >
+                                    Centrum Offline
+                                </button>
+
+                                <div className="text-xs app-text-secondary hidden lg:block">
+                                    Tip: kliknij strzałkę, aby odwrócić sortowanie
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -536,7 +751,7 @@ export default function Deck() {
                     <div className="deck-scrollbar min-h-0 flex-1 overflow-y-auto px-5 pb-5">
                         <div
                             className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-5 auto-rows-max">
-                            {/* Nowa talia */}
+                        {/* Nowa talia */}
                             <div
                                 className="deck-tile-frame relative w-full max-w-[160px] aspect-[0.9] flex flex-col items-center justify-center border-2 border-dashed rounded-2xl cursor-pointer
 transition hover:scale-[1.03] overflow-hidden justify-self-center"
@@ -576,6 +791,17 @@ transition hover:scale-[1.03] overflow-hidden justify-self-center"
 
                 {/* PRAWY PANEL */}
                 <div className="deck-surface min-h-0 overflow-hidden rounded-[30px] flex flex-col">
+                    {isOfflineReadonlyMode && (
+                        <div className="shrink-0 m-4 mb-0 rounded-2xl border border-amber-300 bg-amber-100/90 px-4 py-3 text-sm text-amber-950 shadow">
+                            <div className="font-extrabold">
+                                Tryb offline / snapshot
+                            </div>
+                            <div className="mt-1 leading-snug">
+                                Oglądasz lokalnie zapisaną kopię decka. Możesz przeglądać karty i uruchamiać podgląd,
+                                ale edycja decka, wyniki, eksport i pobieranie nowych danych wymagają backendu.
+                            </div>
+                        </div>
+                    )}
                     {/* Górna część info */}
                     <div className="shrink-0 p-4 2xl:p-5">
                         <div
@@ -599,7 +825,8 @@ transition hover:scale-[1.03] overflow-hidden justify-self-center"
                                 </div>
 
                                 <div className="mt-1 text-xs app-text-secondary">
-                                    {isSharedDeck ? <>Właściciel decka: <b>{deckOwnerLabel}</b> • tryb widmowy / read-only</> : <>Właściciel decka: <b>{deckOwnerLabel}</b></>}
+                                    {isSharedDeck ? <>Właściciel decka: <b>{deckOwnerLabel}</b> • tryb widmowy /
+                                        read-only</> : <>Właściciel decka: <b>{deckOwnerLabel}</b></>}
                                 </div>
 
                                 <div className="mt-1">
@@ -629,7 +856,7 @@ transition hover:scale-[1.03] overflow-hidden justify-self-center"
                                     <button
                                         className="deck-btn-success-soft px-2.5 py-1 rounded-lg text-sm leading-tight disabled:opacity-50"
                                         onClick={handleWin}
-                                        disabled={savingResult}
+                                        disabled={savingResult || isOfflineReadonlyMode || !selectedDeckId}
                                     >
                                         Wygrana
                                     </button>
@@ -637,7 +864,7 @@ transition hover:scale-[1.03] overflow-hidden justify-self-center"
                                     <button
                                         className="deck-btn-danger-soft px-2.5 py-1 rounded-lg text-sm leading-tight disabled:opacity-50"
                                         onClick={handleLoss}
-                                        disabled={savingResult}
+                                        disabled={savingResult || isOfflineReadonlyMode || !selectedDeckId}
                                     >
                                         Przegrana
                                     </button>
@@ -645,7 +872,7 @@ transition hover:scale-[1.03] overflow-hidden justify-self-center"
                                     <button
                                         className="deck-btn-muted px-2.5 py-1 rounded-lg text-sm leading-tight disabled:opacity-50"
                                         onClick={resetWinRatio}
-                                        disabled={savingResult}
+                                        disabled={savingResult || isOfflineReadonlyMode || !selectedDeckId}
                                         title="Ustaw wins/losses na 0"
                                     >
                                         Reset wyniku
@@ -671,21 +898,23 @@ transition hover:scale-[1.03] overflow-hidden justify-self-center"
                             <button
                                 className="deck-btn-primary px-2 py-2 rounded-xl text-sm leading-tight min-h-[44px] disabled:opacity-40"
                                 onClick={() => setShowEdit(true)}
-                                disabled={isReadOnlyDeck || !selectedDeckId}
-                                title={isReadOnlyDeck ? "Udostępniony deck jest tylko do podglądu" : "Edytuj deck"}
+                                disabled={deckWriteBlocked || !selectedDeckId}
+                                title={deckWriteBlocked ? "Deck jest tylko do podglądu w tym trybie" : "Edytuj deck"}
                             >
                                 Edytuj Deck
                             </button>
 
-                            <button className="deck-btn-muted px-2 py-2 rounded-xl text-sm leading-tight min-h-[44px] disabled:opacity-40" disabled>
+                            <button
+                                className="deck-btn-muted px-2 py-2 rounded-xl text-sm leading-tight min-h-[44px] disabled:opacity-40"
+                                disabled>
                                 Kopiuj
                             </button>
 
                             <button
                                 className="deck-btn-muted px-2 py-2 rounded-xl text-sm leading-tight min-h-[44px] disabled:opacity-40"
-                                disabled={isReadOnlyDeck || !selectedDeckId}
+                                disabled={deckWriteBlocked || !selectedDeckId}
                                 onClick={() => setShowExport(true)}
-                                title={isReadOnlyDeck ? "Nie możesz eksportować cudzego decka" : "Udostępnij deck innemu użytkownikowi"}
+                                title={deckWriteBlocked ? "Eksport wymaga decka online z możliwością edycji" : "Udostępnij deck innemu użytkownikowi"}
                             >
                                 Export
                             </button>
@@ -693,10 +922,67 @@ transition hover:scale-[1.03] overflow-hidden justify-self-center"
                             <button
                                 className="deck-btn-danger px-2 py-2 rounded-xl text-sm leading-tight min-h-[44px] disabled:opacity-40"
                                 onClick={handleDelete}
-                                disabled={isReadOnlyDeck || !selectedDeckId}
+                                disabled={deckWriteBlocked || !selectedDeckId}
                             >
                                 Usuń
                             </button>
+                        </div>
+                        <div className="mt-2 deck-card-box rounded-2xl p-3">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                    className="deck-btn-muted px-3 py-2 rounded-xl text-sm leading-tight disabled:opacity-40"
+                                    onClick={handlePreloadDeckImages}
+                                    disabled={
+                                        isOfflineReadonlyMode ||
+                                        !selectedDeckId ||
+                                        preloadingImages ||
+                                        allDeckCardIds.length === 0
+                                    }
+                                    title="Pobierz small + large obrazy kart z tej talii do cache"
+                                >
+                                    {preloadingImages ? "Pobieram obrazy…" : "Pobierz obrazy offline"}
+                                </button>
+
+                                <button
+                                    className="deck-btn-primary px-3 py-2 rounded-xl text-sm leading-tight disabled:opacity-40"
+                                    onClick={handleDownloadOfflinePackage}
+                                    disabled={
+                                        isOfflineReadonlyMode ||
+                                        !selectedDeckId ||
+                                        exportingOfflinePackage ||
+                                        allDeckCardIds.length === 0
+                                    }
+                                    title="Wygeneruj ZIP z deckiem i obrazami kart"
+                                >
+                                    {exportingOfflinePackage ? "Tworzę ZIP…" : "Eksportuj paczkę offline"}
+                                </button>
+
+                                <button
+                                    className="deck-btn-muted px-3 py-2 rounded-xl text-sm leading-tight disabled:opacity-40"
+                                    onClick={() => {
+                                        if (isOfflineReadonlyMode) {
+                                            showOfflineReadonlyAlert("Import paczki offline");
+                                            return;
+                                        }
+
+                                        setShowImportOfflinePackage(true);
+                                    }}
+                                    disabled={isOfflineReadonlyMode}
+                                    title="Wczytaj ZIP z deckiem wyeksportowanym na innym urządzeniu"
+                                >
+                                    Importuj ZIP
+                                </button>
+
+                                <div className="text-[12px] app-text-secondary leading-snug">
+                                    {preloadImagesMsg || (
+                                        <>
+                                            Przygotuj deck do pracy offline lub wygeneruj paczkę ZIP do przeniesienia.
+                                            <br/>
+                                            Karty do eksportu: <b>{allDeckCardIds.length}</b>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -770,8 +1056,9 @@ transition hover:scale-[1.03] overflow-hidden justify-self-center"
                                         }
                                         title={`${card.name || "Karta"} ×${qty}`}
                                     >
-                                        <img
-                                            src={card.imageUrlSmall || "/card_placeholder.png"}
+                                        <CardImage
+                                            card={card}
+                                            size="small"
                                             alt={card.name || "card"}
                                             className="w-full h-[76px] xl:h-[82px] 2xl:h-[90px] object-contain bg-transparent rounded-md transition-transform duration-200 group-hover:scale-[1.12]"
                                         />
@@ -787,7 +1074,7 @@ transition hover:scale-[1.03] overflow-hidden justify-self-center"
                 </div>
             </div>
 
-            {showEdit && !isReadOnlyDeck && (
+            {showEdit && !deckWriteBlocked && (
                 <DeckEditModal
                     deck={safeSelectedDeck}
                     logos={AVAILABLE_LOGOS}
@@ -796,21 +1083,28 @@ transition hover:scale-[1.03] overflow-hidden justify-self-center"
                 />
             )}
 
-            {showExport && !isReadOnlyDeck && (
+            {showExport && !deckWriteBlocked && (
                 <ExportDeckModal
                     deck={safeSelectedDeck}
                     onClose={() => setShowExport(false)}
                     onSuccess={handleExportSuccess}
                 />
             )}
+            {showImportOfflinePackage && !isOfflineReadonlyMode && (
+                <ImportOfflineDeckModal
+                    onClose={() => setShowImportOfflinePackage(false)}
+                    onSuccess={handleImportOfflinePackageSuccess}
+                />
+            )}
 
-            {showCreate && (
+            {showCreate && !isOfflineReadonlyMode && (
                 <NewDeckModal
                     logos={AVAILABLE_LOGOS}
                     onSave={handleCreateDeck}
                     onClose={() => setShowCreate(false)}
                 />
             )}
+
         </div>
     );
 }

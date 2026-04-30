@@ -1,17 +1,27 @@
 // src/context/AuthContext.jsx
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import api from "../api";
-import { attachAuthInterceptors } from "../api"; // jeśli eksportujesz z tego samego pliku
+import { attachAuthInterceptors } from "../api";
+import {
+    isOfflineLikeError,
+    isRealAuthError,
+} from "../services/httpErrorUtils.js";
 
 const AuthContext = createContext();
 
 function parseJwt(token) {
     if (!token) return null;
+
     try {
         return JSON.parse(atob(token.split(".")[1]));
     } catch {
         return null;
     }
+}
+
+function getInitialOnlineStatus() {
+    if (typeof navigator === "undefined") return true;
+    return navigator.onLine;
 }
 
 export function AuthProvider({ children }) {
@@ -23,7 +33,34 @@ export function AuthProvider({ children }) {
     const [accessToken, setAccessToken] = useState(() => localStorage.getItem("accessToken") || null);
     const [refreshToken, setRefreshToken] = useState(() => localStorage.getItem("refreshToken") || null);
 
-    // ===== persist =====
+    /**
+     * isOnline = status przeglądarki.
+     * backendUnavailable = backend Spring Boot nie odpowiada albo proxy zwraca 500/502/503/504.
+     */
+    const [isOnline, setIsOnline] = useState(getInitialOnlineStatus);
+    const [backendUnavailable, setBackendUnavailable] = useState(false);
+
+    const offlineAuthMode = !!user && !!accessToken && (!isOnline || backendUnavailable);
+
+    useEffect(() => {
+        const handleOnline = () => {
+            setIsOnline(true);
+        };
+
+        const handleOffline = () => {
+            setIsOnline(false);
+            setBackendUnavailable(true);
+        };
+
+        window.addEventListener("online", handleOnline);
+        window.addEventListener("offline", handleOffline);
+
+        return () => {
+            window.removeEventListener("online", handleOnline);
+            window.removeEventListener("offline", handleOffline);
+        };
+    }, []);
+
     useEffect(() => {
         if (user) localStorage.setItem("user", JSON.stringify(user));
         else localStorage.removeItem("user");
@@ -39,37 +76,52 @@ export function AuthProvider({ children }) {
         else localStorage.removeItem("refreshToken");
     }, [refreshToken]);
 
-    // ===== login / logout =====
     const login = ({ username, accessToken, refreshToken }) => {
         setUser({ username });
         setAccessToken(accessToken);
         setRefreshToken(refreshToken);
+        setBackendUnavailable(false);
     };
 
     const logout = () => {
         setUser(null);
         setAccessToken(null);
         setRefreshToken(null);
+        setBackendUnavailable(false);
     };
 
-    // ===== refresh (z blokadą równoległych refreshy) =====
+    const markBackendUnavailable = () => {
+        setBackendUnavailable(true);
+    };
+
+    const markBackendAvailable = () => {
+        setBackendUnavailable(false);
+    };
+
     const refreshInFlightRef = useRef(null);
 
     const refreshAccessToken = async () => {
         if (!refreshToken) throw new Error("No refresh token");
 
-        // jeśli już trwa refresh -> podłącz się
         if (refreshInFlightRef.current) return refreshInFlightRef.current;
 
         refreshInFlightRef.current = (async () => {
-            const res = await api.post("/auth/refresh", { refreshToken }); // backend: /api/auth/refresh
-            const newAccess = res.data?.accessToken;
-            const newRefresh = res.data?.refreshToken; // u Ciebie zwykle ten sam, ale obsługujemy rotację
+            const res = await api.post("/auth/refresh", { refreshToken });
 
-            if (!newAccess) throw new Error("Refresh response missing accessToken");
+            const newAccess = res.data?.accessToken;
+            const newRefresh = res.data?.refreshToken;
+
+            if (!newAccess) {
+                throw new Error("Refresh response missing accessToken");
+            }
 
             setAccessToken(newAccess);
-            if (newRefresh) setRefreshToken(newRefresh);
+
+            if (newRefresh) {
+                setRefreshToken(newRefresh);
+            }
+
+            setBackendUnavailable(false);
 
             return newAccess;
         })();
@@ -81,11 +133,9 @@ export function AuthProvider({ children }) {
         }
     };
 
-    // ===== auto refresh w tle (np. 60s przed exp) =====
     const refreshTimerRef = useRef(null);
 
     useEffect(() => {
-        // wyczyść poprzedni timer
         if (refreshTimerRef.current) {
             clearTimeout(refreshTimerRef.current);
             refreshTimerRef.current = null;
@@ -95,19 +145,30 @@ export function AuthProvider({ children }) {
 
         const decoded = parseJwt(accessToken);
         const expSec = decoded?.exp;
+
         if (!expSec) return;
 
         const now = Date.now();
         const expMs = expSec * 1000;
-        const refreshAt = expMs - 60_000; // 60 sekund przed wygaśnięciem
-        const delay = Math.max(5_000, refreshAt - now); // min 5s, żeby nie walić natychmiast pętlą
+        const refreshAt = expMs - 60_000;
+        const delay = Math.max(5_000, refreshAt - now);
 
         refreshTimerRef.current = setTimeout(async () => {
             try {
                 await refreshAccessToken();
-                // po odświeżeniu tokena ten useEffect odpali się ponownie i ustawi kolejny timer
-            } catch {
-                // jeśli refresh padnie (np. refresh token wygasł) -> wyloguj
+            } catch (error) {
+                /**
+                 * Backend niedostępny — NIE logoutujemy.
+                 * Użytkownik zostaje w aplikacji i może używać snapshotu offline.
+                 */
+                if (isOfflineLikeError(error) && !isRealAuthError(error)) {
+                    markBackendUnavailable();
+                    return;
+                }
+
+                /**
+                 * Realny błąd auth — logout.
+                 */
                 logout();
             }
         }, delay);
@@ -118,29 +179,75 @@ export function AuthProvider({ children }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [accessToken, refreshToken]);
 
-    // ===== podpinamy interceptory api (Authorization + retry po 401) =====
+    /**
+     * Gdy przeglądarka wróci online, spróbuj odświeżyć token.
+     * Jeśli backend dalej nie działa, zostajemy w trybie offline.
+     */
+    useEffect(() => {
+        if (!isOnline || !user || !refreshToken) return;
+
+        let cancelled = false;
+
+        const tryRefreshAfterOnline = async () => {
+            try {
+                await refreshAccessToken();
+
+                if (!cancelled) {
+                    markBackendAvailable();
+                }
+            } catch (error) {
+                if (cancelled) return;
+
+                if (isOfflineLikeError(error) && !isRealAuthError(error)) {
+                    markBackendUnavailable();
+                    return;
+                }
+
+                logout();
+            }
+        };
+
+        tryRefreshAfterOnline();
+
+        return () => {
+            cancelled = true;
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isOnline]);
+
     useEffect(() => {
         const detach = attachAuthInterceptors({
             getAccessToken: () => accessToken,
             refreshAccessToken,
             logout,
+            notifyOfflineAuthProblem: markBackendUnavailable,
         });
 
         return () => detach?.();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [accessToken, refreshToken]); // tokeny zmienią się po refreshu/loginie
+    }, [accessToken, refreshToken]);
+
+    const authValue = useMemo(
+        () => ({
+            user,
+            accessToken,
+            refreshToken,
+            login,
+            logout,
+            refreshAccessToken,
+
+            isOnline,
+            backendUnavailable,
+            offlineAuthMode,
+
+            markBackendUnavailable,
+            markBackendAvailable,
+        }),
+        [user, accessToken, refreshToken, isOnline, backendUnavailable, offlineAuthMode]
+    );
 
     return (
-        <AuthContext.Provider
-            value={{
-                user,
-                accessToken,
-                refreshToken,
-                login,
-                logout,
-                refreshAccessToken, // <--- DODANE: będzie użyte w "Twoje konto"
-            }}
-        >
+        <AuthContext.Provider value={authValue}>
             {children}
         </AuthContext.Provider>
     );

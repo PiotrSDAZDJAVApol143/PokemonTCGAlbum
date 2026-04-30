@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { FaSignOutAlt, FaBars, FaSun, FaMoon } from "react-icons/fa";
 import Logo from "../assets/Logo01.png";
 import { useAuth } from "../context/AuthContext";
+import ConnectionStatusBadge from "./ConnectionStatusBadge.jsx";
 
 function NavSquare({
                        to,
@@ -269,6 +270,7 @@ export default function Navbar({ themeMode, setThemeMode }) {
                     <div className="flex items-center justify-center">
                         <ThemeToggle themeMode={themeMode} setThemeMode={setThemeMode} />
                     </div>
+                    <ConnectionStatusBadge />
 
                     {/* 13 */}<div />
 

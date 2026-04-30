@@ -1,6 +1,7 @@
 import {useState, useEffect} from "react";
 import axios from "axios";
 import {useNavigate} from "react-router-dom";
+import CardImage from "../components/CardImage.jsx";
 
 export default function AlbumAllView({ goBack, page, setPage, search, setSearch }) {
     const [cards, setCards] = useState([]);
@@ -47,8 +48,9 @@ export default function AlbumAllView({ goBack, page, setPage, search, setSearch 
                         })}
                         style={{ minHeight: 260 }}
                     >
-                        <img
-                            src={card.imageUrlSmall || card.officialArtworkUrl}
+                        <CardImage
+                            card={card}
+                            size="small"
                             alt={card.name}
                             className="w-[220px] h-[310px] object-contain drop-shadow-lg"
                             style={{ background: "#fff", borderRadius: "12px" }}

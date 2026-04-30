@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import api from "../api";
+import { shareDeck } from "../services/deckService.js";
+import { searchUsers } from "../services/userService.js";
 
 export default function ExportDeckModal({ deck, onClose, onSuccess }) {
     const [query, setQuery] = useState("");
@@ -11,15 +12,25 @@ export default function ExportDeckModal({ deck, onClose, onSuccess }) {
 
     useEffect(() => {
         let cancelled = false;
+
         const timer = setTimeout(async () => {
             try {
                 setLoading(true);
-                const res = await api.get("/user/search", { params: { query } });
+                setMessage("");
+
+                const list = await searchUsers(query);
+
                 if (cancelled) return;
-                const list = Array.isArray(res.data) ? res.data : [];
                 setUsers(list);
-            } catch {
-                if (!cancelled) setUsers([]);
+            } catch (e) {
+                if (cancelled) return;
+
+                setUsers([]);
+                setMessage(
+                    e?.response?.data?.message ||
+                    e?.response?.data ||
+                    "Nie udało się wyszukać użytkowników."
+                );
             } finally {
                 if (!cancelled) setLoading(false);
             }
@@ -42,11 +53,17 @@ export default function ExportDeckModal({ deck, onClose, onSuccess }) {
         try {
             setSubmitting(true);
             setMessage("");
-            await api.post(`/user/decks/${deck.id}/share`, { targetUsername: selectedUsername });
+
+            await shareDeck(deck.id, selectedUsername);
+
             setMessage(`Deck został udostępniony użytkownikowi ${selectedUsername}.`);
             onSuccess?.(selectedUsername);
         } catch (e) {
-            setMessage(e?.response?.data?.message || e?.response?.data || "Nie udało się wyeksportować decka.");
+            setMessage(
+                e?.response?.data?.message ||
+                e?.response?.data ||
+                "Nie udało się wyeksportować decka."
+            );
         } finally {
             setSubmitting(false);
         }

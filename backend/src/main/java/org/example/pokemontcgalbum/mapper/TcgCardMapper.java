@@ -157,6 +157,7 @@ public class TcgCardMapper {
                     ? card.getSet().getReleaseDate().toString()
                     : null);
             setDto.setPrintedTotal(card.getSet().getPrintedTotal());
+            setDto.setTotal(card.getSet().getTotal());
             dto.setSet(setDto);
         }
 

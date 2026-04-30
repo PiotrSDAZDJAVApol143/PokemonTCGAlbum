@@ -14,6 +14,13 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
+import org.example.pokemontcgalbum.service.DeckOfflinePackageService;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+
+import java.nio.charset.StandardCharsets;
 
 import java.util.List;
 
@@ -23,6 +30,7 @@ import java.util.List;
 public class DeckController {
     private final UserService userService;
     private final UserDeckService deckService;
+    private final DeckOfflinePackageService deckOfflinePackageService;
 
     private User getUser(Authentication auth) {
         String username = auth.getName();
@@ -61,6 +69,33 @@ public class DeckController {
     public DeckDto getDeck(Authentication auth, @PathVariable Long deckId) {
         User user = getUser(auth);
         return deckService.getDeckDtoById(deckId, user);
+    }
+    @GetMapping("/decks/{deckId}/offline-package")
+    public ResponseEntity<byte[]> downloadDeckOfflinePackage(
+            Authentication auth,
+            @PathVariable Long deckId
+    ) {
+        User user = getUser(auth);
+
+        DeckDto deckDto = deckService.getDeckDtoById(deckId, user);
+
+        byte[] zipBytes = deckOfflinePackageService.buildDeckOfflinePackage(deckId, user);
+
+        String safeDeckName = deckDto.getName() == null
+                ? "deck"
+                : deckDto.getName().replaceAll("[^a-zA-Z0-9._-]", "_");
+
+        String filename = "deck-" + deckId + "-" + safeDeckName + "-offline.zip";
+
+        ContentDisposition contentDisposition = ContentDisposition
+                .attachment()
+                .filename(filename, StandardCharsets.UTF_8)
+                .build();
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition.toString())
+                .contentType(MediaType.parseMediaType("application/zip"))
+                .body(zipBytes);
     }
 
     @PostMapping("/decks/{deckId}/share")

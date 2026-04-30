@@ -1,6 +1,7 @@
 import {useState, useEffect} from "react";
 import axios from "axios";
 import {useNavigate} from "react-router-dom";
+import CardImage from "../components/CardImage.jsx";
 
 export default function AlbumSetCardsView({
                                               setId,
@@ -78,11 +79,12 @@ export default function AlbumSetCardsView({
                             })}
                             style={{minHeight: 260}}
                         >
-                            <img
-                                src={card.imageUrlSmall || card.officialArtworkUrl}
+                            <CardImage
+                                card={card}
+                                size="small"
                                 alt={card.name}
-                                className="w-[184px] h-[260px] object-contain drop-shadow-lg"
-                                style={{background: "#fff", borderRadius: "12px"}}
+                                className="w-[220px] h-[310px] object-contain drop-shadow-lg"
+                                style={{ background: "#fff", borderRadius: "12px" }}
                             />
                             <div className="font-bold mt-2">{card.name}</div>
                         </div>
